@@ -1,69 +1,101 @@
-// Service Worker sederhana untuk DATABASE (Penjualan, Ringkasan, Stok Gudang)
-// Data aplikasi (sales/stok) disimpan di IndexedDB milik browser, BUKAN di cache ini.
-// Cache ini hanya untuk file "app shell" (HTML/JS/CSS/ikon) agar bisa dibuka offline.
-
-const CACHE_NAME = 'database-app-v1';
-const APP_SHELL = [
+const CACHE_NAME = 'database-v1';
+const urlsToCache = [
   './',
-  './DATABASE.html',
+  './index.html',
   './manifest.json',
-  './icon-192.png',
-  './icon-512.png'
+  'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'
 ];
 
+// Install event
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      // addAll akan gagal total kalau satu file 404, jadi tambahkan satu-satu
-      return Promise.all(
-        APP_SHELL.map((url) => cache.add(url).catch(() => {}))
-      );
-    })
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        console.log('Opened cache');
+        return cache.addAll(urlsToCache).catch(err => {
+          console.warn('Some URLs failed to cache:', err);
+          // Tetap lanjut meski ada yang gagal
+          return Promise.resolve();
+        });
+      })
+      .then(() => self.skipWaiting())
   );
 });
 
+// Activate event
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames
+          .filter((cacheName) => cacheName !== CACHE_NAME)
+          .map((cacheName) => {
+            console.log('Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          })
+      );
+    }).then(() => self.clients.claim())
   );
 });
 
-// Strategi: network-first untuk file HTML (biar update terbaru selalu diambil kalau online),
-// cache-first untuk asset lain (ikon, manifest), fallback ke cache saat offline.
+// Fetch event - Network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
-
-  const isHTML = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
-
-  if (isHTML) {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const resClone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
-          return res;
-        })
-        .catch(() => caches.match(req).then((cached) => cached || caches.match('./DATABASE.html')))
-    );
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') {
     return;
   }
 
   event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req)
-        .then((res) => {
-          const resClone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
-          return res;
-        })
-        .catch(() => cached);
-    })
+    fetch(event.request)
+      .then((response) => {
+        // Clone response karena bisa hanya dibaca sekali
+        const responseClone = response.clone();
+        
+        // Cache yang berhasil di-fetch
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseClone);
+        });
+        
+        return response;
+      })
+      .catch(() => {
+        // Jika gagal fetch, gunakan cache
+        return caches.match(event.request)
+          .then((response) => {
+            if (response) {
+              return response;
+            }
+            
+            // Fallback untuk navigasi
+            if (event.request.mode === 'navigate') {
+              return caches.match('./index.html');
+            }
+            
+            return new Response('Offline - Resource not available', {
+              status: 503,
+              statusText: 'Service Unavailable',
+              headers: new Headers({
+                'Content-Type': 'text/plain'
+              })
+            });
+          });
+      })
   );
+});
+
+// Background sync untuk data (optional, untuk browser yang support)
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-data') {
+    event.waitUntil(
+      // Bisa kirim pesan ke client untuk sync
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({
+            type: 'SYNC_DATA'
+          });
+        });
+      })
+    );
+  }
 });
