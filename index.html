@@ -3,1070 +3,446 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DATABASE — Penjualan, Ringkasan & Stok Gudang</title>
-  
-  <!-- PWA Manifest & Meta Tags -->
+  <title>DATABASE</title>
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#0284c7">
-  <meta name="description" content="Database penjualan, ringkasan & stok gudang real-time">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="DATABASE">
-  
-  <!-- Icons -->
-  <link rel="icon" type="image/png" sizes="192x192" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%230284c7' width='192' height='192'/><text x='50%' y='50%' font-size='120' font-weight='bold' fill='white' text-anchor='middle' dominant-baseline='central'>DB</text></svg>">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect fill='%230284c7' width='180' height='180' rx='40'/><text x='50%' y='50%' font-size='100' font-weight='bold' fill='white' text-anchor='middle' dominant-baseline='central'>DB</text></svg>">
-  
-  <!-- Libraries -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
   <style>
-    :root, [data-theme="light"] {
-      --bg: #f1f5f9;
-      --card: #ffffff;
-      --border: #e2e8f0;
-      --text: #1e293b;
-      --muted: #64748b;
-      --accent: #0284c7;
-      --accent-soft: #e0f2fe;
-      --green: #16a34a;
-      --green-bg: #dcfce7;
-      --yellow: #ca8a04;
-      --yellow-bg: #fef9c3;
-      --red: #dc2626;
-      --red-bg: #fee2e2;
-      --indigo: #4f46e5;
-      --indigo-bg: #e0e7ff;
-      --header-bg: #ffffff;
-      --table-hover: #f8fafc;
-      --th-bg: #f8fafc;
-      --input-bg: #ffffff;
-      --shadow: 0 1px 3px rgba(0,0,0,.08);
-    }
-    [data-theme="dark"] {
-      --bg: #0f172a;
-      --card: #1e293b;
-      --border: #334155;
-      --text: #e2e8f0;
-      --muted: #94a3b8;
-      --accent: #38bdf8;
-      --accent-soft: #0c4a6e;
-      --green: #4ade80;
-      --green-bg: #14532d;
-      --yellow: #facc15;
-      --yellow-bg: #713f12;
-      --red: #f87171;
-      --red-bg: #7f1d1d;
-      --indigo: #a5b4fc;
-      --indigo-bg: #312e81;
-      --header-bg: #1e293b;
-      --table-hover: #243047;
-      --th-bg: #0f172a;
-      --input-bg: #1e293b;
-      --shadow: 0 1px 3px rgba(0,0,0,.3);
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      line-height: 1.45;
-    }
-
-    .top-header {
-      background: var(--header-bg);
-      border-bottom: 1px solid var(--border);
-      box-shadow: var(--shadow);
-      position: sticky;
-      top: 0;
-      z-index: 50;
-    }
-    .header-inner {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 10px 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .brand h1 { font-size: 1.05rem; font-weight: 700; white-space: nowrap; }
-    .brand .sub { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
-    .sync-indicator {
-      font-size: 0.75rem;
-      color: var(--green);
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .sync-indicator.offline { color: var(--yellow); }
-    .sync-indicator.error { color: var(--red); }
-    .sync-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--green);
-      animation: pulse 2s infinite;
-    }
-    .sync-indicator.offline .sync-dot { background: var(--yellow); }
-    .sync-indicator.error .sync-dot { background: var(--red); }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .upload-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 8px 14px;
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .upload-btn:hover { opacity: .9; }
-    .upload-btn input { display: none; }
-    .file-label {
-      font-size: 0.75rem;
-      color: var(--green);
-      max-width: 140px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .mini-cards { display: none; gap: 6px; flex-wrap: wrap; }
-    .mini-cards.show { display: flex; }
-    .mini {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      padding: 5px 10px;
-      text-align: center;
-      min-width: 68px;
-    }
-    .mini .l { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
-    .mini .v { font-size: 0.9rem; font-weight: 700; }
-
-    .theme-btn {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 7px 10px;
-      cursor: pointer;
-      font-size: 1rem;
-      line-height: 1;
-      color: var(--text);
-    }
-
-    .install-btn {
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 8px 14px;
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      display: none;
-    }
-    .install-btn:hover { opacity: .9; }
-
-    .container { max-width: 1400px; margin: 0 auto; padding: 16px; }
-
-    .tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
-    .tab-btn {
-      padding: 9px 18px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--card);
-      color: var(--muted);
-      font-weight: 600;
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
-    .tab-btn:hover { color: var(--text); }
-    .tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-    .search-bar {
-      display: none;
-      gap: 8px;
-      margin-bottom: 14px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .search-bar.show { display: flex; }
-    .search-bar input {
-      flex: 1;
-      min-width: 180px;
-      background: var(--input-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 9px 12px;
-      color: var(--text);
-      font-size: 0.9rem;
-      outline: none;
-    }
-    .search-bar input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-    .search-bar input::placeholder { color: var(--muted); }
-    .search-bar select {
-      background: var(--input-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 9px 10px;
-      color: var(--text);
-      font-size: 0.85rem;
-      outline: none;
-    }
-    .btn {
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 9px 16px;
-      font-weight: 600;
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
-    .btn:hover { opacity: .9; }
-    .btn-outline {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text);
-    }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 0.7rem;
-      font-weight: 700;
-    }
-    .badge-lunas { background: var(--green-bg); color: var(--green); }
-    .badge-titip { background: var(--yellow-bg); color: var(--yellow); }
-    .badge-tf { background: var(--accent-soft); color: var(--accent); }
-    .badge-utang { background: var(--red-bg); color: var(--red); }
-
+    :root, [data-theme="light"] { --bg: #f1f5f9; --card: #fff; --text: #1e293b; --accent: #0284c7; --muted: #64748b; --green: #16a34a; --red: #dc2626; }
+    [data-theme="dark"] { --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --accent: #38bdf8; --muted: #94a3b8; --green: #4ade80; --red: #f87171; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    .header { background: var(--card); padding: 16px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { font-size: 18px; }
+    .header-right { display: flex; gap: 10px; }
+    button { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { opacity: 0.9; }
+    .status { font-size: 12px; }
+    .status.online { color: var(--green); }
+    .status.offline { color: var(--red); }
+    .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab-btn { padding: 10px 20px; background: var(--card); border: 1px solid #333; cursor: pointer; border-radius: 6px; color: var(--text); }
+    .tab-btn.active { background: var(--accent); color: white; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .upload-area { background: var(--card); padding: 20px; border-radius: 8px; margin-bottom: 16px; }
+    label { display: block; margin: 8px 0; }
+    input, select { padding: 8px; border: 1px solid #333; border-radius: 6px; background: var(--bg); color: var(--text); width: 100%; margin-top: 4px; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-    th {
-      background: var(--th-bg);
-      font-weight: 700;
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      color: var(--muted);
-      letter-spacing: 0.02em;
-    }
-    tr:hover { background: var(--table-hover); }
-    td.num { text-align: right; font-family: 'Courier New', monospace; font-size: 0.9rem; }
-    td.toko { font-weight: 500; }
-
-    .stok-del {
-      background: var(--red-bg);
-      color: var(--red);
-      border: 1px solid var(--red);
-      border-radius: 5px;
-      padding: 4px 8px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .stok-del:hover { background: var(--red); color: #fff; }
-
-    /* Input Modal */
-    .modal { display: none; }
-    .modal.show { display: flex !important; }
-    .modal {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
-      align-items: center;
-      justify-content: center;
-      z-index: 999;
-    }
-    .modal-box {
-      background: var(--card);
-      border-radius: 12px;
-      padding: 24px;
-      max-width: 500px;
-      width: 90%;
-      max-height: 85vh;
-      overflow-y: auto;
-      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3);
-    }
-    .modal-header { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; }
-    .modal-close {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      background: transparent;
-      border: none;
-      font-size: 1.5rem;
-      cursor: pointer;
-      color: var(--text);
-    }
-    .form-group {
-      margin-bottom: 14px;
-    }
-    .form-group label {
-      display: block;
-      font-size: 0.85rem;
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: var(--text);
-    }
-    .form-group input,
-    .form-group select,
-    .form-group textarea {
-      width: 100%;
-      background: var(--input-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px;
-      color: var(--text);
-      font-size: 0.9rem;
-      font-family: inherit;
-    }
-    .form-group input:focus,
-    .form-group select:focus,
-    .form-group textarea:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-soft);
-    }
-    .modal-buttons {
-      display: flex;
-      gap: 8px;
-      margin-top: 20px;
-      justify-content: flex-end;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 40px 20px;
-      color: var(--muted);
-    }
-    .empty-state p { margin: 8px 0; }
-
-    @media (max-width: 768px) {
-      .header-inner { flex-direction: column; align-items: flex-start; }
-      .header-right { width: 100%; }
-      table { font-size: 0.85rem; }
-      th, td { padding: 8px; }
-      .modal-box { width: 95%; padding: 20px; }
-    }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #333; }
+    th { background: var(--card); font-weight: 600; }
+    .badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .badge-lunas { background: #dcfce7; color: #16a34a; }
+    .badge-titip { background: #fef9c3; color: #ca8a04; }
+    .badge-tf { background: #e0f2fe; color: #0284c7; }
+    .badge-utang { background: #fee2e2; color: #dc2626; }
+    .empty { text-align: center; padding: 40px; color: var(--muted); }
+    .info { background: var(--card); padding: 12px; border-radius: 6px; margin-bottom: 16px; font-size: 14px; }
   </style>
 </head>
 <body>
 
-  <header class="top-header">
-    <div class="header-inner">
-      <div class="brand">
-        <h1>📊 DATABASE</h1>
-        <div class="sub">Penjualan • Ringkasan • Stok Gudang</div>
-      </div>
-      <div style="flex: 1;"></div>
-      <div id="syncIndicator" class="sync-indicator offline">
-        <span class="sync-dot"></span>
-        <span id="syncText">Offline</span>
-      </div>
-      <div class="header-right">
-        <button id="installBtn" class="install-btn" onclick="installApp()">📲 Install</button>
-        <button class="theme-btn" onclick="toggleTheme()">🌙</button>
-      </div>
-    </div>
-  </header>
+<header class="header">
+  <div>
+    <h1>📊 DATABASE</h1>
+    <small style="color: var(--muted);">Penjualan • Ringkasan • Stok Gudang</small>
+  </div>
+  <div class="header-right">
+    <span class="status" id="statusBadge">Offline</span>
+    <button class="btn-primary" id="installBtn" style="display:none" onclick="installApp()">📲 Install</button>
+    <button class="btn-primary" onclick="toggleTheme()">🌙</button>
+  </div>
+</header>
 
-  <div class="container">
-    <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('sales')">📈 Data Penjualan</button>
-      <button class="tab-btn" onclick="switchTab('summary')">📊 Ringkasan</button>
-      <button class="tab-btn" onclick="switchTab('stok')">📦 Stok Gudang</button>
-    </div>
+<div class="container">
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('sales')">📈 Penjualan</button>
+    <button class="tab-btn" onclick="switchTab('summary')">📊 Ringkasan</button>
+    <button class="tab-btn" onclick="switchTab('stok')">📦 Stok</button>
+  </div>
 
-    <!-- TAB: Sales -->
-    <div id="salesTab">
-      <div class="search-bar" id="salesSearchBar">
-        <input type="text" id="searchSales" placeholder="Cari..." onkeyup="filterSalesTable()">
-        <select id="sheetFilter" onchange="populateSalesFilters(); filterSalesTable();">
-          <option value="">Semua Sheet</option>
-        </select>
-        <select id="bulanFilter" onchange="filterSalesTable();">
-          <option value="">Semua Bulan</option>
-        </select>
-        <select id="statusFilter" onchange="filterSalesTable();">
-          <option value="">Semua Status</option>
-          <option value="Lunas">Lunas</option>
-          <option value="Titip">Titip</option>
-          <option value="TF">TF</option>
-          <option value="Utang">Utang</option>
-        </select>
-        <button class="btn" onclick="clearSalesData();" id="clearSalesBtn" style="display:none;">🗑️ Hapus Semua</button>
-      </div>
-      <label class="upload-btn">
+  <!-- SALES TAB -->
+  <div id="sales" class="tab-content active">
+    <div class="upload-area">
+      <label class="btn-primary" style="cursor:pointer; display:inline-block; margin:0">
         📤 Upload Excel
-        <input type="file" accept=".xlsx,.xls" id="uploadSales" onchange="handleSalesUpload(event)">
+        <input type="file" accept=".xlsx,.xls" id="fileInput" style="display:none" onchange="uploadExcel(this)">
       </label>
-      <div id="salesFileNameEl" class="file-label"></div>
-      <div id="salesEmptyState" class="empty-state">
-        <p>📂 Belum ada data penjualan</p>
-        <p style="font-size:0.85rem;">Upload file Excel untuk memulai</p>
-      </div>
-      <div id="salesTableContainer" style="display:none; margin-top: 16px; overflow-x: auto;">
-        <table>
-          <thead>
-            <tr>
-              <th>Toko</th>
-              <th>Produk</th>
-              <th>Tanggal</th>
-              <th>Harga</th>
-              <th>Qty</th>
-              <th>Total</th>
-              <th>Status</th>
-              <th>Bayar</th>
-              <th>Sisa</th>
-            </tr>
-          </thead>
-          <tbody id="salesTbody"></tbody>
-        </table>
-      </div>
+      <div id="fileName" class="info" style="margin-top:8px; display:none;"></div>
     </div>
-
-    <!-- TAB: Summary -->
-    <div id="summaryTab" style="display:none;">
-      <div class="mini-cards" id="ringkasanCards"></div>
-      <div id="ringkasanTableContainer" style="margin-top: 16px; overflow-x: auto;"></div>
-    </div>
-
-    <!-- TAB: Stok -->
-    <div id="stokTab" style="display:none;">
-      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-          <div class="form-group" style="margin-bottom: 0;">
-            <label>Produk</label>
-            <select id="stokProdukSel" onchange="onStokProdukChange()"></select>
-            <input type="text" id="stokProdukNew" placeholder="Nama produk baru" style="display:none; margin-top: 6px;">
-            <div id="stokProdukHint" style="font-size: 0.75rem; color: var(--muted); margin-top: 4px;"></div>
-          </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label>Tanggal</label>
-            <input type="date" id="stokTgl">
-          </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label>Stok Awal</label>
-            <input type="number" id="stokAwal" value="0" min="0">
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px;">
-          <div class="form-group" style="margin-bottom: 0;">
-            <label>Masuk</label>
-            <input type="number" id="stokMasuk" value="0" min="0">
-          </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label>Keluar</label>
-            <input type="number" id="stokKeluar" value="0" min="0">
-          </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label>&nbsp;</label>
-            <button class="btn" onclick="addStokRow()" style="width: 100%;">➕ Input Manual</button>
-          </div>
-          <button id="stokProdukFilter" style="display:none;"></button>
-        </div>
-      </div>
-
-      <div id="stokTableContainer" style="overflow-x: auto;">
-        <table>
-          <thead>
-            <tr>
-              <th>Produk</th>
-              <th>Tanggal</th>
-              <th>Stok Awal</th>
-              <th>Masuk</th>
-              <th>Keluar</th>
-              <th>Saldo</th>
-              <th>Aksi</th>
-            </tr>
-          </thead>
-          <tbody id="stokTbody"></tbody>
-        </table>
-      </div>
-      <div id="stokCountHint" style="text-align: center; padding: 16px; color: var(--muted); font-size: 0.85rem;"></div>
+    
+    <div id="salesEmpty" class="empty">📂 Belum ada data penjualan</div>
+    <div id="salesTable" style="display:none; overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Toko</th><th>Produk</th><th>Tanggal</th><th>Harga</th><th>Qty</th>
+            <th>Total</th><th>Status</th><th>Bayar</th><th>Sisa</th>
+          </tr>
+        </thead>
+        <tbody id="salesBody"></tbody>
+      </table>
     </div>
   </div>
 
-  <script>
-    // ===== SUPABASE CONFIG =====
-    const SUPABASE_URL = 'https://hqncomzsdegqukpaeydd.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_e8eJOfNcckNcUpdCc5SrnQ_7GQR9hiB';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  <!-- SUMMARY TAB -->
+  <div id="summary" class="tab-content">
+    <div id="summaryEmpty" class="empty">Belum ada data</div>
+    <div id="summaryContent" style="display:none;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px;">
+        <div class="info"><strong>Total</strong><div id="totalSales" style="font-size:20px; font-weight:bold;"></div></div>
+        <div class="info"><strong>Terbayar</strong><div id="totalPaid" style="font-size:20px; font-weight:bold;"></div></div>
+        <div class="info"><strong>Utang</strong><div id="totalDebt" style="font-size:20px; font-weight:bold; color:var(--red);"></div></div>
+        <div class="info"><strong>Transaksi</strong><div id="totalTx" style="font-size:20px; font-weight:bold;"></div></div>
+      </div>
+    </div>
+  </div>
 
-    let salesRows = [];
-    let stokRows = [];
-    let customProdukList = [];
-    let demoMode = false;
-    let installPrompt = null;
-    let syncStatus = 'offline'; // 'online', 'offline', 'error'
+  <!-- STOK TAB -->
+  <div id="stok" class="tab-content">
+    <div class="upload-area">
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+        <div>
+          <label>Produk</label>
+          <select id="stokProduk"></select>
+        </div>
+        <div>
+          <label>Tanggal</label>
+          <input type="date" id="stokTgl">
+        </div>
+        <div>
+          <label>Masuk</label>
+          <input type="number" id="stokMasuk" value="0" min="0">
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:12px;">
+        <div>
+          <label>Keluar</label>
+          <input type="number" id="stokKeluar" value="0" min="0">
+        </div>
+        <div>
+          <label>Stok Awal</label>
+          <input type="number" id="stokAwal" value="0" min="0">
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+          <button class="btn-primary" style="width:100%" onclick="addStok()">➕ Tambah</button>
+        </div>
+      </div>
+    </div>
 
-    // ===== SYNC INDICATOR =====
-    function updateSyncStatus(status, message) {
-      syncStatus = status;
-      const indicator = document.getElementById('syncIndicator');
-      const text = document.getElementById('syncText');
-      indicator.className = 'sync-indicator ' + status;
-      text.textContent = message || status;
-    }
+    <div id="stokEmpty" class="empty">Belum ada data stok</div>
+    <div id="stokTable" style="display:none; overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Produk</th><th>Tanggal</th><th>Awal</th><th>Masuk</th><th>Keluar</th><th>Saldo</th>
+          </tr>
+        </thead>
+        <tbody id="stokBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
-    // Check online/offline status
-    window.addEventListener('online', () => updateSyncStatus('online', 'Tersync'));
-    window.addEventListener('offline', () => updateSyncStatus('offline', 'Offline'));
+<script>
+console.log('📱 DATABASE App Starting...');
 
-    // Check initial connection
-    if (navigator.onLine) {
-      updateSyncStatus('online', 'Tersync');
-    } else {
-      updateSyncStatus('offline', 'Offline');
-    }
+// Supabase config
+const SB_URL = 'https://hqncomzsdegqukpaeydd.supabase.co';
+const SB_KEY = 'sb_publishable_e8eJOfNcckNcUpdCc5SrnQ_7GQR9hiB';
 
-    // ===== PWA INSTALLATION =====
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      installPrompt = e;
-      document.getElementById('installBtn').style.display = 'block';
-    });
+let supabaseClient;
+try {
+  supabaseClient = window.supabase.createClient(SB_URL, SB_KEY);
+  console.log('✅ Supabase connected');
+} catch(e) {
+  console.error('❌ Supabase error:', e.message);
+}
 
-    function installApp() {
-      if (!installPrompt) return;
-      installPrompt.prompt();
-      installPrompt.userChoice.then(() => {
-        installPrompt = null;
-        document.getElementById('installBtn').style.display = 'none';
-      });
-    }
+// Data
+let salesData = [];
+let stokData = [];
 
-    window.addEventListener('appinstalled', () => {
-      console.log('PWA berhasil diinstall!');
-    });
-
-    // ===== INDEXEDDB =====
-    const dbName = 'DATABASEv01';
-    const dbVersion = 1;
-    let db;
-
-    async function initDB() {
-      return new Promise((resolve, reject) => {
-        const request = indexedDB.open(dbName, dbVersion);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => {
-          db = request.result;
-          resolve();
-        };
-        request.onupgradeneeded = (e) => {
-          const d = e.target.result;
-          if (!d.objectStoreNames.contains('sales')) {
-            d.createObjectStore('sales', { keyPath: 'id' });
-          }
-          if (!d.objectStoreNames.contains('stok')) {
-            d.createObjectStore('stok', { keyPath: 'id' });
-          }
-        };
-      });
-    }
-
-    async function loadSalesFromDB() {
-      if (!db) return [];
-      return new Promise((resolve) => {
-        const tx = db.transaction('sales', 'readonly');
-        const store = tx.objectStore('sales');
-        const request = store.getAll();
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => resolve([]);
-      });
-    }
-
-    async function saveSalesToDB(data) {
-      if (!db) return;
-      return new Promise((resolve) => {
-        const tx = db.transaction('sales', 'readwrite');
-        const store = tx.objectStore('sales');
-        store.clear();
-        data.forEach(row => {
-          row.id = row.id || String(Math.random());
-          store.add(row);
-        });
-        tx.oncomplete = () => resolve();
-      });
-    }
-
-    async function loadStokFromDB() {
-      if (!db) return [];
-      return new Promise((resolve) => {
-        const tx = db.transaction('stok', 'readonly');
-        const store = tx.objectStore('stok');
-        const request = store.getAll();
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => resolve([]);
-      });
-    }
-
-    async function saveStokToDB() {
-      if (!db) return;
-      return new Promise((resolve) => {
-        const tx = db.transaction('stok', 'readwrite');
-        const store = tx.objectStore('stok');
-        store.clear();
-        stokRows.forEach(row => store.add(row));
-        tx.oncomplete = () => {
-          if (navigator.onLine) syncStokToSupabase();
-          resolve();
-        };
-      });
-    }
-
-    // ===== SUPABASE SYNC =====
-    async function syncSalesToSupabase() {
-      if (!navigator.onLine) return;
-      try {
-        const { error } = await supabase.from('sales_data').upsert(
-          salesRows.map(r => ({
-            id: r.id || crypto.randomUUID(),
-            data: JSON.stringify(r)
-          }))
-        );
-        if (error) throw error;
-        updateSyncStatus('online', 'Tersync');
-      } catch (err) {
-        console.error('Sync error:', err);
-        updateSyncStatus('error', 'Sync error');
-      }
-    }
-
-    async function syncStokToSupabase() {
-      if (!navigator.onLine) return;
-      try {
-        const { error } = await supabase.from('stok_data').upsert(
-          stokRows.map(r => ({
-            id: r.id,
-            produk: r.produk,
-            tgl: r.tgl,
-            stok_awal: r.stokAwal,
-            masuk: r.masuk,
-            keluar: r.keluar
-          }))
-        );
-        if (error) throw error;
-        updateSyncStatus('online', 'Tersync');
-      } catch (err) {
-        console.error('Sync error:', err);
-        updateSyncStatus('error', 'Sync error');
-      }
-    }
-
-    async function loadFromSupabase() {
-      if (!navigator.onLine) return;
-      try {
-        const { data: sales, error: err1 } = await supabase.from('sales_data').select('*');
-        if (sales) {
-          salesRows = sales.map(r => {
-            try { return JSON.parse(r.data); } catch { return r; }
-          });
-          await saveSalesToDB(salesRows);
-        }
-        const { data: stok, error: err2 } = await supabase.from('stok_data').select('*');
-        if (stok) {
-          stokRows = stok.map(r => ({
-            id: r.id,
-            produk: r.produk,
-            tgl: r.tgl,
-            stokAwal: r.stok_awal,
-            masuk: r.masuk,
-            keluar: r.keluar
-          }));
-          await saveStokToDB();
-        }
-        updateSyncStatus('online', 'Tersync');
-      } catch (err) {
-        console.error('Load error:', err);
-      }
-    }
-
-    // ===== UTILITY FUNCTIONS =====
-    function esc(s) {
-      const div = document.createElement('div');
-      div.textContent = s;
-      return div.innerHTML;
-    }
-
-    function num(v) {
-      const n = Number(v);
-      return isNaN(n) ? 0 : n;
-    }
-
-    function fmtNum(v) {
-      const n = num(v);
-      return n.toLocaleString('id-ID');
-    }
-
-    function fmtCur(v) {
-      const n = num(v);
-      return 'Rp ' + n.toLocaleString('id-ID');
-    }
-
-    function normProduk(p) {
-      return (p || '').trim().toLowerCase();
-    }
-
-    const BULAN = {
-      '1': 'Januari', '2': 'Februari', '3': 'Maret', '4': 'April', '5': 'Mei', '6': 'Juni',
-      '7': 'Juli', '8': 'Agustus', '9': 'September', '10': 'Oktober', '11': 'November', '12': 'Desember',
-      'Januari': 1, 'Februari': 2, 'Maret': 3, 'April': 4, 'Mei': 5, 'Juni': 6,
-      'Juli': 7, 'Agustus': 8, 'September': 9, 'Oktober': 10, 'November': 11, 'Desember': 12
+// DB Init
+let db;
+async function initDB() {
+  return new Promise((resolve) => {
+    const req = indexedDB.open('DATABASE', 1);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('sales')) d.createObjectStore('sales');
+      if (!d.objectStoreNames.contains('stok')) d.createObjectStore('stok');
     };
+    req.onsuccess = () => {
+      db = req.result;
+      console.log('✅ IndexedDB ready');
+      resolve();
+    };
+  });
+}
 
-    // ===== THEME =====
-    function toggleTheme() {
-      const html = document.documentElement;
-      const current = html.getAttribute('data-theme') || 'dark';
-      const next = current === 'dark' ? 'light' : 'dark';
-      html.setAttribute('data-theme', next);
-      localStorage.setItem('theme', next);
+async function loadData() {
+  // Load from IndexedDB
+  const tx = db.transaction(['sales', 'stok'], 'readonly');
+  const sales = await new Promise(r => {
+    tx.objectStore('sales').get('data').onsuccess = (e) => r(e.target.result?.data || []);
+  });
+  const stok = await new Promise(r => {
+    tx.objectStore('stok').get('data').onsuccess = (e) => r(e.target.result?.data || []);
+  });
+  salesData = sales;
+  stokData = stok;
+  console.log('📦 Loaded from cache:', sales.length, 'sales,', stok.length, 'stok');
+  render();
+}
+
+async function saveData() {
+  const tx = db.transaction(['sales', 'stok'], 'readwrite');
+  tx.objectStore('sales').put({ data: salesData }, 'data');
+  tx.objectStore('stok').put({ data: stokData }, 'data');
+  await new Promise(r => { tx.oncomplete = r; });
+  
+  // Sync to Supabase
+  if (navigator.onLine && supabaseClient) {
+    try {
+      await supabaseClient.from('sales_data').upsert({ id: 'main', data: JSON.stringify(salesData) });
+      await supabaseClient.from('stok_data').upsert({ id: 'main', data: JSON.stringify(stokData) });
+      console.log('✅ Synced to Supabase');
+      updateStatus('online');
+    } catch(e) {
+      console.error('❌ Sync failed:', e.message);
+      updateStatus('error');
     }
+  }
+}
 
-    const savedTheme = localStorage.getItem('theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', savedTheme);
+// Upload Excel
+function uploadExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  console.log('📤 Reading file:', file.name);
 
-    // ===== TAB SWITCHING =====
-    function switchTab(tab) {
-      const tabs = ['sales', 'summary', 'stok'];
-      tabs.forEach(t => {
-        const el = document.getElementById(t + 'Tab');
-        const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b =>
-          b.textContent.includes(['Data Penjualan', 'Ringkasan', 'Stok Gudang']['salesSummarystok'.indexOf(t)])
-        );
-        if (el) el.style.display = t === tab ? 'block' : 'none';
-      });
-      document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-        btn.classList.toggle('active', (i === ['sales', 'summary', 'stok'].indexOf(tab)));
-      });
-      if (tab === 'summary') renderRingkasan();
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const data = XLSX.utils.sheet_to_json(ws);
+      console.log('✅ Loaded', data.length, 'rows from Excel');
+
+      salesData = data.map((r, i) => ({
+        id: i,
+        toko: r.Toko || '',
+        produk: r.Produk || '',
+        tanggal: r.Tanggal || '',
+        harga: Number(r.Harga) || 0,
+        qty: Number(r.Qty) || 0,
+        total: Number(r.Total) || 0,
+        status: r.Status || 'Lunas',
+        bayar: Number(r.Bayar) || 0,
+      }));
+
+      saveData();
+      document.getElementById('fileName').textContent = '✅ ' + file.name + ' (' + salesData.length + ' baris)';
+      document.getElementById('fileName').style.display = 'block';
+      input.value = '';
+    } catch(e) {
+      alert('❌ Error: ' + e.message);
+      console.error(e);
     }
+  };
+  reader.readAsArrayBuffer(file);
+}
 
-    // ===== SALES UPLOAD =====
-    function handleSalesUpload(e) {
-      const file = e.target.files[0];
-      if (!file) return;
+function addStok() {
+  const produk = document.getElementById('stokProduk').value;
+  const tgl = document.getElementById('stokTgl').value;
+  const masuk = Number(document.getElementById('stokMasuk').value) || 0;
+  const keluar = Number(document.getElementById('stokKeluar').value) || 0;
+  const awal = Number(document.getElementById('stokAwal').value) || 0;
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const wb = XLSX.read(event.target.result, { type: 'array' });
-          salesRows = [];
-          wb.SheetNames.forEach(sheetName => {
-            const ws = wb.Sheets[sheetName];
-            const data = XLSX.utils.sheet_to_json(ws);
-            data.forEach(row => {
-              const normalized = {
-                id: 'sale_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-                sheet: sheetName,
-                toko: row['Toko'] || row['toko'] || '',
-                produk: row['Produk'] || row['produk'] || '',
-                tanggal: row['Tanggal'] || row['tanggal'] || '',
-                harga: num(row['Harga'] || row['harga']),
-                qty: num(row['Qty'] || row['qty']),
-                total: num(row['Total'] || row['total']),
-                status: row['Status'] || row['status'] || 'Lunas',
-                bayar: num(row['Bayar'] || row['bayar']),
-                month: ''
-              };
-              normalized.sisa = normalized.total - normalized.bayar;
-              salesRows.push(normalized);
-            });
-          });
+  if (!produk || !tgl) {
+    alert('⚠️ Isi produk dan tanggal');
+    return;
+  }
 
-          saveSalesToDB(salesRows);
-          syncSalesToSupabase();
-          populateSalesFilters();
-          filterSalesTable();
-          document.getElementById('salesFileNameEl').textContent = '✅ ' + file.name + ' (' + salesRows.length + ' baris)';
-          document.getElementById('salesEmptyState').style.display = 'none';
-          document.getElementById('clearSalesBtn').style.display = 'block';
-        } catch (err) {
-          alert('Error membaca file: ' + err.message);
-        }
-      };
-      reader.readAsArrayBuffer(file);
+  stokData.push({
+    id: Date.now(),
+    produk, tgl, awal, masuk, keluar,
+  });
+
+  saveData();
+  document.getElementById('stokMasuk').value = '0';
+  document.getElementById('stokKeluar').value = '0';
+  document.getElementById('stokAwal').value = '0';
+}
+
+// Render
+function render() {
+  renderSales();
+  renderStok();
+  updateStokOptions();
+}
+
+function renderSales() {
+  const tbody = document.getElementById('salesBody');
+  const empty = document.getElementById('salesEmpty');
+  const table = document.getElementById('salesTable');
+
+  if (salesData.length === 0) {
+    empty.style.display = 'block';
+    table.style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+  table.style.display = 'block';
+
+  tbody.innerHTML = salesData.map(r => {
+    const sisa = r.total - r.bayar;
+    const statusClass = {
+      'Lunas': 'badge-lunas',
+      'Titip': 'badge-titip',
+      'TF': 'badge-tf',
+      'Utang': 'badge-utang'
+    }[r.status] || 'badge-utang';
+
+    return `<tr>
+      <td>${r.toko}</td>
+      <td>${r.produk}</td>
+      <td>${r.tanggal}</td>
+      <td>Rp ${r.harga.toLocaleString('id-ID')}</td>
+      <td>${r.qty}</td>
+      <td>Rp ${r.total.toLocaleString('id-ID')}</td>
+      <td><span class="badge ${statusClass}">${r.status}</span></td>
+      <td>Rp ${r.bayar.toLocaleString('id-ID')}</td>
+      <td style="color:${sisa > 0 ? 'var(--red)' : 'var(--green)'}">Rp ${sisa.toLocaleString('id-ID')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSummary() {
+  if (salesData.length === 0) {
+    document.getElementById('summaryEmpty').style.display = 'block';
+    document.getElementById('summaryContent').style.display = 'none';
+    return;
+  }
+
+  const total = salesData.reduce((s, r) => s + r.total, 0);
+  const paid = salesData.reduce((s, r) => s + r.bayar, 0);
+  const debt = total - paid;
+
+  document.getElementById('summaryEmpty').style.display = 'none';
+  document.getElementById('summaryContent').style.display = 'grid';
+  document.getElementById('totalSales').textContent = 'Rp ' + total.toLocaleString('id-ID');
+  document.getElementById('totalPaid').textContent = 'Rp ' + paid.toLocaleString('id-ID');
+  document.getElementById('totalDebt').textContent = 'Rp ' + debt.toLocaleString('id-ID');
+  document.getElementById('totalTx').textContent = salesData.length;
+}
+
+function renderStok() {
+  const tbody = document.getElementById('stokBody');
+  const empty = document.getElementById('stokEmpty');
+  const table = document.getElementById('stokTable');
+
+  if (stokData.length === 0) {
+    empty.style.display = 'block';
+    table.style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+  table.style.display = 'block';
+
+  tbody.innerHTML = stokData.map(r => {
+    const saldo = r.awal + r.masuk - r.keluar;
+    return `<tr>
+      <td>${r.produk}</td>
+      <td>${r.tgl}</td>
+      <td>${r.awal}</td>
+      <td>${r.masuk}</td>
+      <td>${r.keluar}</td>
+      <td style="color:${saldo < 0 ? 'var(--red)' : 'var(--green)'}">${saldo}</td>
+    </tr>`;
+  }).join('');
+}
+
+function updateStokOptions() {
+  const sel = document.getElementById('stokProduk');
+  const products = [...new Set(salesData.map(r => r.produk).filter(p => p))].sort();
+  sel.innerHTML = '<option>- Pilih produk -</option>' +
+    products.map(p => `<option>${p}</option>`).join('') +
+    '<option>+ Produk baru</option>';
+  
+  sel.onchange = () => {
+    if (sel.value === '+ Produk baru') {
+      const p = prompt('Nama produk baru:');
+      if (p) sel.innerHTML += `<option selected>${p}</option>`;
     }
+  };
+}
 
-    function populateSalesFilters() {
-      const sheets = [...new Set(salesRows.map(r => r.sheet))].sort();
-      const months = [...new Set(salesRows.map(r => monthFromIsoDate(r.tanggal)))].sort((a, b) => {
-        return (BULAN[a] || 13) - (BULAN[b] || 13);
-      });
+// UI
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
+  
+  document.getElementById(tab).classList.add('active');
+  event.target.classList.add('active');
 
-      let html = '<option value="">Semua Sheet</option>';
-      sheets.forEach(s => { html += '<option value="' + esc(s) + '">' + esc(s) + '</option>'; });
-      document.getElementById('sheetFilter').innerHTML = html;
+  if (tab === 'summary') renderSummary();
+}
 
-      html = '<option value="">Semua Bulan</option>';
-      months.forEach(m => { html += '<option value="' + esc(m) + '">' + esc(m) + '</option>'; });
-      document.getElementById('bulanFilter').innerHTML = html;
-    }
+function toggleTheme() {
+  const html = document.documentElement;
+  const theme = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+}
 
-    function filterSalesTable() {
-      const search = (document.getElementById('searchSales').value || '').toLowerCase();
-      const sheet = document.getElementById('sheetFilter').value;
-      const bulan = document.getElementById('bulanFilter').value;
-      const status = document.getElementById('statusFilter').value;
+function updateStatus(status) {
+  const badge = document.getElementById('statusBadge');
+  badge.textContent = status === 'online' ? '✅ Tersync' : '⚠️ Offline';
+  badge.className = 'status ' + status;
+}
 
-      let filtered = salesRows.slice();
-      if (search) {
-        filtered = filtered.filter(r =>
-          (r.toko + r.produk).toLowerCase().includes(search)
-        );
-      }
-      if (sheet) filtered = filtered.filter(r => r.sheet === sheet);
-      if (bulan) filtered = filtered.filter(r => monthFromIsoDate(r.tanggal) === bulan);
-      if (status) filtered = filtered.filter(r => r.status === status);
+function installApp() {
+  // PWA install logic
+}
 
-      const tbody = document.getElementById('salesTbody');
-      const container = document.getElementById('salesTableContainer');
-      if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;">Tidak ada data</td></tr>';
-        container.style.display = 'block';
-        return;
-      }
+// Init
+window.addEventListener('online', () => updateStatus('online'));
+window.addEventListener('offline', () => updateStatus('offline'));
 
-      tbody.innerHTML = filtered.map(r => {
-        const statusCls = r.status === 'Lunas' ? 'badge-lunas' : r.status === 'Titip' ? 'badge-titip' : r.status === 'TF' ? 'badge-tf' : 'badge-utang';
-        return '<tr>' +
-          '<td class="toko">' + esc(r.toko) + '</td>' +
-          '<td>' + esc(r.produk) + '</td>' +
-          '<td>' + esc(formatIsoToDisplay(r.tanggal)) + '</td>' +
-          '<td class="num">' + fmtCur(r.harga) + '</td>' +
-          '<td class="num">' + fmtNum(r.qty) + '</td>' +
-          '<td class="num"><strong>' + fmtCur(r.total) + '</strong></td>' +
-          '<td><span class="badge ' + statusCls + '">' + esc(r.status) + '</span></td>' +
-          '<td class="num">' + fmtCur(r.bayar) + '</td>' +
-          '<td class="num" style="color:' + (r.sisa > 0 ? 'var(--red)' : 'var(--green)') + '">' + fmtCur(r.sisa) + '</td>' +
-          '</tr>';
-      }).join('');
-      container.style.display = 'block';
-    }
+if (!navigator.onLine) updateStatus('offline');
 
-    function clearSalesData() {
-      if (!confirm('Hapus semua data penjualan?')) return;
-      salesRows = [];
-      saveSalesToDB([]);
-      document.getElementById('salesEmptyState').style.display = 'block';
-      document.getElementById('salesFileNameEl').textContent = '';
-      document.getElementById('clearSalesBtn').style.display = 'none';
-      document.getElementById('salesTableContainer').style.display = 'none';
-      populateSalesFilters();
-      filterSalesTable();
-    }
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  document.getElementById('installBtn').style.display = 'block';
+  window.deferredPrompt = e;
+});
 
-    // ===== RINGKASAN =====
-    function renderRingkasan() {
-      if (!salesRows.length) {
-        document.getElementById('ringkasanCards').innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">Belum ada data</div>';
-        return;
-      }
+document.addEventListener('DOMContentLoaded', async () => {
+  await initDB();
+  await loadData();
+  const theme = localStorage.getItem('theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  
+  const d = new Date();
+  document.getElementById('stokTgl').valueAsDate = d;
+  
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(e => console.warn(e));
+  }
+  
+  console.log('🚀 App ready!');
+});
+</script>
 
-      const totalPenjualan = salesRows.reduce((s, r) => s + num(r.total), 0);
-      const totalTerbayar = salesRows.reduce((s, r) => s + num(r.bayar), 0);
-      const totalUtang = salesRows.reduce((s, r) => s + num(r.sisa), 0);
-      const avgPerTransaksi = salesRows.length ? totalPenjualan / salesRows.length : 0;
-
-      document.getElementById('ringkasanCards').innerHTML = `
-        <div class="mini"><div class="l">Total</div><div class="v">${fmtCur(totalPenjualan)}</div></div>
-        <div class="mini"><div class="l">Terbayar</div><div class="v">${fmtCur(totalTerbayar)}</div></div>
-        <div class="mini"><div class="l">Utang</div><div class="v" style="color:var(--red)">${fmtCur(totalUtang)}</div></div>
-        <div class="mini"><div class="l">Transaksi</div><div class="v">${salesRows.length}</div></div>
-        <div class="mini"><div class="l">Rata-rata</div><div class="v">${fmtCur(avgPerTransaksi)}</div></div>
-      `;
-      document.getElementById('ringkasanCards').classList.add('show');
-    }
-
-    // ===== STOK =====
-    function monthFromIsoDate(iso) {
-      if (!iso) return 'Lainnya';
-      const parts = String(iso).split('-');
-      if (parts.length >= 2) return BULAN[parts[1]] || BULAN[String(parseInt(parts[1], 10))] || 'Lainnya';
-      return 'Lainnya';
-    }
-
-    function formatIsoToDisplay(iso) {
-      if (!iso) return '';
-      const parts = String(iso).split('-');
-      if (parts.length === 3) return parts[2] + '/' + parts[1] + '/' + parts[0];
-      return iso;
-    }
-
-    function getAllProdukNames() {
-      const fromSales = salesRows.map(r => normProduk(r.produk)).filter(Boolean);
-      const fromStok = stokRows.map(r => normProduk(r.produk)).filter(Boolean);
-      const set = new Set([...fromSales, ...fromStok, ...customProdukList]);
-      return [...set].sort((a, b) => a.localeCompare(b, 'id'));
-    }
-
-    function populateStokProdukOptions() {
-      const sel = document.getElementById('stokProdukSel');
-      const hint = document.getElementById('stokProdukHint');
-      if (!sel) return;
-      const cur = sel.value;
-      let products = getAllProdukNames();
-      const totalCount = products.length;
-      let html = '<option value="">— Pilih produk —</option>';
-      products.forEach(p => { html += '<option value="' + esc(p) + '">' + esc(p) + '</option>'; });
-      html += '<option value="__new__">+ Tambah produk baru…</option>';
-      sel.innerHTML = html;
-      if (cur && products.includes(cur)) sel.value = cur;
-      if (hint) {
-        hint.textContent = totalCount > 0 ? totalCount + ' produk' : 'Belum ada produk';
-      }
-    }
-
-    function onStokProdukChange() {
-      const sel = document.getElementById('stokProdukSel');
-      const inp = document.getElementById('stokProdukNew');
-      if (!sel || !inp) return;
-      inp.style.display = sel.value === '__new__' ? 'block' : 'none';
-    }
-
-    function renderStokTable() {
-      const tbody = document.getElementById('stokTbody');
-      const hint = document.getElementById('stokCountHint');
-      if (!tbody) return;
-
-      let rows = stokRows.slice();
-      rows.sort((a, b) => (b.tgl || '').localeCompare(a.tgl || '') || (a.produk || '').localeCompare(b.produk || ''));
-
-      if (hint) hint.textContent = rows.length > 0 ? rows.length + ' produk' : 'Belum ada data';
-
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;">Belum ada data stok</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = rows.map(r => {
-        const saldo = (Number(r.stokAwal) || 0) + (Number(r.masuk) || 0) - (Number(r.keluar) || 0);
-        const saldoCls = saldo < 0 ? ' style="color:var(--red)"' : '';
-        return '<tr>' +
-          '<td class="toko">' + esc(r.produk) + '</td>' +
-          '<td>' + esc(formatIsoToDisplay(r.tgl)) + '</td>' +
-          '<td class="num">' + fmtNum(r.stokAwal) + '</td>' +
-          '<td class="num">' + fmtNum(r.masuk) + '</td>' +
-          '<td class="num">' + fmtNum(r.keluar) + '</td>' +
-          '<td class="num"><strong' + saldoCls + '>' + fmtNum(saldo) + '</strong></td>' +
-          '<td><button type="button" class="stok-del" onclick="deleteStokRow(\'' + esc(r.id) + '\')">Hapus</button></td>' +
-          '</tr>';
-      }).join('');
-    }
-
-    function addStokRow() {
-      const sel = document.getElementById('stokProdukSel');
-      const newInp = document.getElementById('stokProdukNew');
-      let produk = '';
-      if (sel.value === '__new__') {
-        produk = (newInp.value || '').trim();
-        if (!produk) { alert('Isi nama produk baru'); newInp.focus(); return; }
-        if (!customProdukList.includes(produk)) customProdukList.push(produk);
-      } else {
-        produk = (sel.value || '').trim();
-      }
-      if (!produk) { alert('Pilih atau isi produk'); return; }
-      const tgl = (document.getElementById('stokTgl').value || '').trim();
-      if (!tgl) { alert('Isi tanggal'); return; }
-
-      const stokAwalInput = num(document.getElementById('stokAwal').value);
-      const masuk = num(document.getElementById('stokMasuk').value);
-      const keluar = num(document.getElementById('stokKeluar').value);
-      const produkKey = normProduk(produk);
-
-      const existing = stokRows.find(r => normProduk(r.produk) === produkKey);
-      if (existing) {
-        if (stokAwalInput > 0) existing.stokAwal = stokAwalInput;
-        existing.masuk = (Number(existing.masuk) || 0) + masuk;
-        existing.keluar = (Number(existing.keluar) || 0) + keluar;
-        existing.tgl = tgl;
-      } else {
-        const id = 'stok_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-        stokRows.push({ id, produk: produkKey, tgl, stokAwal: stokAwalInput, masuk, keluar });
-      }
-
-      saveStokToDB();
-      populateStokProdukOptions();
-      renderStokTable();
-      document.getElementById('stokAwal').value = '0';
-      document.getElementById('stokMasuk').value = '0';
-      document.getElementById('stokKeluar').value = '0';
-    }
-
-    function deleteStokRow(id) {
-      if (!confirm('Hapus baris stok ini?')) return;
-      stokRows = stokRows.filter(r => r.id !== id);
-      saveStokToDB();
-      renderStokTable();
-    }
-
-    // ===== SERVICE WORKER & INITIALIZATION =====
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(err => {
-          console.warn('SW registration gagal:', err);
-        });
-      });
-    }
-
-    (async function init() {
-      await initDB();
-      const savedSales = await loadSalesFromDB();
-      if (savedSales.length) {
-        salesRows = savedSales;
-        document.getElementById('salesEmptyState').style.display = 'none';
-        document.getElementById('salesFileNameEl').textContent = '✅ Data tersimpan (' + salesRows.length + ' baris)';
-        document.getElementById('clearSalesBtn').style.display = 'block';
-        populateSalesFilters();
-        filterSalesTable();
-      }
-
-      const savedStok = await loadStokFromDB();
-      if (savedStok.length) {
-        stokRows = savedStok;
-      }
-      populateStokProdukOptions();
-
-      // Set tanggal default
-      const tglEl = document.getElementById('stokTgl');
-      if (tglEl && !tglEl.value) {
-        const d = new Date();
-        tglEl.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-      }
-
-      // Load dari Supabase jika online
-      if (navigator.onLine) {
-        loadFromSupabase();
-      }
-    })();
-  </script>
 </body>
 </html>
