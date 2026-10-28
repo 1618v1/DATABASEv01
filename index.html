@@ -16,6 +16,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
 /* ===== CSS VARIABLES ===== */
 :root{
@@ -359,6 +360,15 @@ body.dark .pager-btn{background:#334155;color:#cbd5e1}
 body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
 .pager-btn:disabled{opacity:.45;cursor:not-allowed}
 .pager-bar b{color:var(--strong);font-weight:700}
+.sy-field{display:block;width:100%;box-sizing:border-box;margin:6px 0;padding:9px 10px;border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);color:var(--input-text);font-size:13px}
+.sy-btn{padding:9px 14px;font-size:13px;border:0;border-radius:8px;background:var(--chip-active-bg);color:#fff;font-weight:700;cursor:pointer}
+.sy-btn.ghost{background:var(--chip-bg);color:var(--chip-text)}
+.sy-btn.danger{background:#b42318}
+.sy-stat{font-size:12px;color:var(--subtle);margin:8px 0;line-height:1.5;word-break:break-word}
+.sy-stat.err{color:var(--red)}
+#syncBtn{position:relative}
+#syncDot{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:#94a3b8;border:1px solid #fff}
+#syncDot.ok{background:#22c55e}#syncDot.err{background:#ef4444}#syncDot.busy{background:#f59e0b}
 </style>
 </head>
 <body>
@@ -367,6 +377,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
     <div class="header-left"><div class="header-title">Data Penjualan</div></div>
     <button type="button" id="installBtn" style="display:none;padding:3px 8px;border:1px solid rgba(255,255,255,.5);border-radius:5px;background:rgba(255,255,255,.12);color:#fff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;line-height:1.1">⬇ Instal Aplikasi</button>
     <div style="display:flex;align-items:center;gap:10px">
+      <button type="button" class="theme-btn" id="syncBtn" onclick="openSyncPanel()" title="Sinkronisasi cloud">☁️<span id="syncDot"></span></button>
       <button type="button" class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Mode gelap / terang">🌙</button>
       <div class="dd" id="menuDd">
         <button type="button" class="dd-toggle" onclick="toggleDd()"><span>☰ MENU</span><span class="chev">▼</span></button>
@@ -514,6 +525,30 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
   </div>
 </main>
 
+<div class="gmodal-overlay" id="syncOverlay" onclick="if(event.target===this) closeSyncPanel()">
+  <div class="gmodal-box">
+    <h3>☁️ Sinkronisasi Cloud</h3>
+    <div class="gmodal-sub">Data disimpan di Supabase agar sama di semua perangkat.</div>
+    <div id="syncLogin">
+      <input class="sy-field" id="syEmail" type="email" placeholder="Email" autocomplete="username">
+      <input class="sy-field" id="syPass" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter') syncLogin()">
+      <div class="gmodal-actions"><button type="button" class="sy-btn ghost" onclick="closeSyncPanel()">Tutup</button><button type="button" class="sy-btn" onclick="syncLogin()">Masuk</button></div>
+    </div>
+    <div id="syncLoggedIn" style="display:none">
+      <div class="sy-stat" id="syncWho"></div>
+      <div id="syncChoice" style="display:none">
+        <div class="sy-stat err">Data di perangkat ini dan di cloud sama-sama sudah ada. Pilih data mana yang dipakai:</div>
+        <div class="gmodal-actions" style="justify-content:flex-start">
+          <button type="button" class="sy-btn danger" onclick="syncChoose('up')">Pakai data perangkat ini (timpa cloud)</button>
+          <button type="button" class="sy-btn danger" onclick="syncChoose('down')">Pakai data cloud (timpa perangkat ini)</button>
+        </div>
+      </div>
+      <div class="gmodal-actions"><button type="button" class="sy-btn ghost" onclick="syncLogout()">Keluar</button><button type="button" class="sy-btn ghost" onclick="closeSyncPanel()">Tutup</button><button type="button" class="sy-btn" onclick="syncNow({force:true})">Sinkronkan sekarang</button></div>
+    </div>
+    <div class="sy-stat" id="syncStatus"></div>
+  </div>
+</div>
+
 <div class="gmodal-overlay" id="fkBatalOverlay" onclick="if(event.target===this) closeFkBatalModal()">
   <div class="gmodal-box">
     <h3>Detail Faktur — <span id="fkBatalNo">-</span></h3>
@@ -632,6 +667,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
       if (useIDB && db) { await db.meta.put({ key: 'batalFaktur', value: arr }); await db.meta.put({ key: 'batalLine', value: arrL }); }
       else { localStorage.setItem('rekap-batal-faktur', JSON.stringify(arr)); localStorage.setItem('rekap-batal-line', JSON.stringify(arrL)); }
     } catch(e){ console.warn('saveBatalFaktur', e); }
+    try { await syncMarkBatal(); } catch(e){}
   }
   let _qsTimer = null;
   function onQuickSearchInput(){ clearTimeout(_qsTimer); _qsTimer = setTimeout(() => applyFilters(), 300); }
@@ -852,6 +888,7 @@ self.onmessage = function(e){
         catch(e){ console.warn('delete null-day rows', e); }
       }
       if (list.length){ try { await db.tx.bulkPut(list.map(r => { const o = Object.assign({}, r); delete o.id; return o; })); } catch(e){ console.warn('bulkPut incoming', e); } }
+      try { await syncMarkMonths([...new Set(list.map(r => r.bulan || ''))]); } catch(e){ console.warn('syncMark', e); }
     } else {
       const daySet = new Set(dayKeys);
       if (daySet.size) rows = rows.filter(x => !daySet.has(dayKeyOfTs(x._ts)));
@@ -1317,6 +1354,7 @@ self.onmessage = function(e){
       if (!count) return alert('Tidak ada data pada bulan tersebut.');
       if (!confirm('Hapus ' + count.toLocaleString('id-ID') + ' baris pada ' + monthLabel(m) + '?')) return;
       await db.tx.where('bulan').equals(m).delete();
+      try { await syncMarkMonths([m]); } catch(e){}
       const monthsMeta = ((await db.meta.get('months')) || {}).value || [];
       await db.meta.put({key:'months', value: monthsMeta.filter(x => x !== m)});
       await refreshAfterDataChange();
@@ -1361,6 +1399,7 @@ self.onmessage = function(e){
       const oldText = oldPrices.length === 1 ? rp(oldPrices[0]) : oldPrices.map(rp).join(' / ');
       if (!confirm('Ubah Harga Beli "' + product + '" pada ' + label + '?\n\nJumlah: ' + matches.length.toLocaleString('id-ID') + '\nSebelumnya: ' + oldText + '\nBaru: ' + rp(v))) return;
       await db.tx.where('_ts').between(fromTs, toTs, true, true).and(r => U(r.produk) === U(product)).modify({hargaBeli: v});
+      try { await syncMarkMonths([...new Set(matches.map(r => r.bulan || ''))]); } catch(e){}
       await refreshAfterDataChange();
       document.getElementById('bulkHargaValue').value = '';
       setStatus('Harga Beli "' + product + '" pada ' + label + ' diubah menjadi ' + rp(v) + ' untuk ' + matches.length.toLocaleString('id-ID') + ' transaksi.');
@@ -2309,8 +2348,10 @@ self.onmessage = function(e){
     if(!backup || !Array.isArray(backup.tx)) throw new Error('Format file backup tidak dikenali.');
     if(!confirm('Restore akan mengganti data lokal aplikasi dengan isi backup ini. Lanjutkan?')) return false;
     if(!useIDB || !db) throw new Error('Penyimpanan lokal belum siap.');
+    const _prevSync = await getSyncState(), _prevKeys = Object.keys(_prevSync.months || {});
     await db.tx.clear(); if(backup.tx.length) await db.tx.bulkPut(backup.tx);
-    await db.meta.clear(); if(Array.isArray(backup.meta) && backup.meta.length) await db.meta.bulkPut(backup.meta);
+    await db.meta.clear(); if(Array.isArray(backup.meta) && backup.meta.length) await db.meta.bulkPut(backup.meta.filter(m => m.key !== 'syncState' && m.key !== 'syncDirty'));
+    try { if (_prevSync.init) { await setMetaVal('syncState', _prevSync); await syncMarkAll(_prevKeys); } } catch(e){ console.warn('sync after restore', e); }
     await restoreFromDB(); await refreshAfterDataChange();
     setStatus('Restore berhasil: '+backup.tx.length.toLocaleString('id-ID')+' transaksi.');
     return true;
@@ -2375,11 +2416,211 @@ self.onmessage = function(e){
     applyTheme(mode);
   }
 
+  // ===================== SINKRONISASI CLOUD (Supabase) =====================
+  const SB_URL = 'https://hkrzoxlxzdmqyenorexe.supabase.co';
+  const SB_KEY = 'sb_publishable_HXvWJmEjxBAMJDSY206R2g_S9yg8Xlr';
+  const SYNC_POLL_MS = 60000;
+  let sb = null, sbUser = null, _syncBusy = false, _syncPushTimer = null, _syncNeedsChoice = false, _syncLastMsg = '', _syncLastErr = false;
+  const mkKey = b => b || '_none', fromMk = k => k === '_none' ? '' : k;
+
+  async function getMetaVal(key, def){ try { const m = await db.meta.get(key); return (m && m.value != null) ? m.value : def; } catch(e){ return def; } }
+  async function setMetaVal(key, value){ await db.meta.put({ key, value }); }
+  const getSyncState = async () => Object.assign({ init:false, months:{}, batalVer:'' }, await getMetaVal('syncState', {}));
+  const getSyncDirty = async () => Object.assign({ months:[], batal:false }, await getMetaVal('syncDirty', {}));
+
+  function setSyncUi(msg, isErr, kind){
+    _syncLastMsg = msg || ''; _syncLastErr = !!isErr;
+    const dot = document.getElementById('syncDot'); if (dot) dot.className = !sbUser ? '' : (isErr ? 'err' : (kind || 'ok'));
+    const el = document.getElementById('syncStatus'); if (el){ el.textContent = _syncLastMsg; el.className = 'sy-stat' + (isErr ? ' err' : ''); }
+    const btn = document.getElementById('syncBtn'); if (btn) btn.title = 'Sinkronisasi cloud' + (msg ? ' — ' + msg : '');
+  }
+  function renderSyncPanel(){
+    document.getElementById('syncLogin').style.display = sbUser ? 'none' : 'block';
+    document.getElementById('syncLoggedIn').style.display = sbUser ? 'block' : 'none';
+    document.getElementById('syncChoice').style.display = (sbUser && _syncNeedsChoice) ? 'block' : 'none';
+    const w = document.getElementById('syncWho'); if (w) w.textContent = sbUser ? ('Masuk sebagai ' + (sbUser.email || '')) : '';
+    setSyncUi(_syncLastMsg, _syncLastErr);
+  }
+  function openSyncPanel(){ if (!sb) { alert('Library Supabase belum termuat (cek koneksi internet), lalu muat ulang halaman.'); return; } renderSyncPanel(); document.getElementById('syncOverlay').classList.add('show'); }
+  function closeSyncPanel(){ document.getElementById('syncOverlay').classList.remove('show'); }
+
+  async function syncLogin(){
+    const email = document.getElementById('syEmail').value.trim(), password = document.getElementById('syPass').value;
+    if (!email || !password) { setSyncUi('Isi email dan password.', true); return; }
+    setSyncUi('Masuk…', false, 'busy');
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) { setSyncUi('Gagal masuk: ' + error.message, true); return; }
+    document.getElementById('syPass').value = '';
+    const { data } = await sb.auth.getSession(); sbUser = data.session ? data.session.user : null;
+    renderSyncPanel(); await syncNow({ force:true });
+    if (!_syncNeedsChoice && !_syncLastErr) closeSyncPanel();
+  }
+  async function syncLogout(){ try { await sb.auth.signOut(); } catch(e){} sbUser = null; _syncNeedsChoice = false; setSyncUi('', false); renderSyncPanel(); }
+
+  function schedulePush(){ clearTimeout(_syncPushTimer); _syncPushTimer = setTimeout(() => syncNow(), 1500); }
+  async function syncMarkMonths(list){
+    if (!useIDB || !db) return;
+    const ks = [...new Set((list || []).map(mkKey))]; if (!ks.length) return;
+    const d = await getSyncDirty(); ks.forEach(k => { if (!d.months.includes(k)) d.months.push(k); });
+    await setMetaVal('syncDirty', d); schedulePush();
+  }
+  async function syncMarkBatal(){
+    if (!useIDB || !db) return;
+    const d = await getSyncDirty(); d.batal = true; await setMetaVal('syncDirty', d); schedulePush();
+  }
+  async function syncLocalMonthKeys(){
+    const set = new Set(); await db.tx.orderBy('bulan').uniqueKeys().then(ks => ks.forEach(k => set.add(mkKey(k))));
+    return [...set];
+  }
+  async function syncMarkAll(extraKeys){
+    if (!useIDB || !db) return;
+    const d = await getSyncDirty(); const all = new Set([...d.months, ...(await syncLocalMonthKeys()), ...(extraKeys || [])]);
+    d.months = [...all]; d.batal = true; await setMetaVal('syncDirty', d); schedulePush();
+  }
+
+  async function syncPushBatal(st, d){
+    const { data, error } = await sb.from('rekap_meta').select('key,value,ver').in('key', ['batalFaktur', 'batalLine']);
+    if (error) throw error;
+    const cf = (data || []).find(r => r.key === 'batalFaktur'), cl = (data || []).find(r => r.key === 'batalLine');
+    let fk = [...batalFakturSet], ln = [...batalLineSet];
+    if (cf && cf.ver !== st.batalVer) {   // perangkat lain mengubah batal -> gabungkan agar tidak hilang
+      fk = [...new Set([...fk, ...(Array.isArray(cf.value) ? cf.value : [])])];
+      ln = [...new Set([...ln, ...((cl && Array.isArray(cl.value)) ? cl.value : [])])];
+      batalFakturSet = new Set(fk); batalLineSet = new Set(ln);
+      await setMetaVal('batalFaktur', fk); await setMetaVal('batalLine', ln);
+    }
+    const ver = new Date().toISOString() + '-' + Math.random().toString(36).slice(2, 6);
+    const { error: e2 } = await sb.from('rekap_meta').upsert([{ key:'batalFaktur', value:fk, ver }, { key:'batalLine', value:ln, ver }], { onConflict:'key' });
+    if (e2) throw e2;
+    st.batalVer = ver; d.batal = false;
+  }
+  async function syncPush(){
+    const st = await getSyncState(), d = await getSyncDirty();
+    for (const k of [...d.months]) {
+      const arr = await db.tx.where('bulan').equals(fromMk(k)).toArray();
+      if (!arr.length) {
+        const { error } = await sb.from('rekap_months').delete().eq('bulan', k); if (error) throw error;
+        delete st.months[k];
+      } else {
+        const ver = new Date().toISOString() + '-' + Math.random().toString(36).slice(2, 6);
+        const rowsPayload = arr.map(r => { const o = Object.assign({}, r); delete o.id; return o; });
+        const { error } = await sb.from('rekap_months').upsert({ bulan:k, rows:rowsPayload, row_count:arr.length, ver }, { onConflict:'bulan' });
+        if (error) throw error;
+        st.months[k] = ver;
+      }
+      d.months = d.months.filter(x => x !== k);
+      await setMetaVal('syncState', st); await setMetaVal('syncDirty', d);
+    }
+    if (d.batal) { await syncPushBatal(st, d); await setMetaVal('syncState', st); await setMetaVal('syncDirty', d); }
+  }
+  async function syncRebuildMeta(){
+    const prods = new Set(), sl = new Set(), mo = new Set();
+    await db.tx.each(r => { if (r.produk) prods.add(U(r.produk)); if (r.sales) sl.add(U(r.sales)); if (r.bulan) mo.add(r.bulan); });
+    const months = [...mo].sort().reverse();
+    await setMetaVal('products', [...prods].sort()); await setMetaVal('sales', [...sl].sort()); await setMetaVal('months', months);
+    if (filters.month && !months.includes(filters.month)) filters.month = pickLatestMonth(months);
+  }
+  async function syncPull(){
+    const st = await getSyncState(), d = await getSyncDirty();
+    const { data: list, error } = await sb.from('rekap_months').select('bulan,ver,row_count');
+    if (error) throw error;
+    const cloudMap = new Map((list || []).map(x => [x.bulan, x]));
+    let changed = false;
+    for (const x of (list || [])) {
+      if (d.months.includes(x.bulan) || st.months[x.bulan] === x.ver) continue;
+      setSyncUi('Mengunduh ' + (x.bulan === '_none' ? 'data tanpa bulan' : x.bulan) + '…', false, 'busy');
+      const { data: rec, error: e2 } = await sb.from('rekap_months').select('rows,ver').eq('bulan', x.bulan).single();
+      if (e2) throw e2;
+      const rowsIn = (Array.isArray(rec.rows) ? rec.rows : []).map(r => { const o = Object.assign({}, r); delete o.id; return o; });
+      await db.transaction('rw', db.tx, async () => { await db.tx.where('bulan').equals(fromMk(x.bulan)).delete(); if (rowsIn.length) await db.tx.bulkAdd(rowsIn); });
+      st.months[x.bulan] = rec.ver; changed = true;
+    }
+    if (cloudMap.size) {   // bulan yang dihapus di perangkat lain -> hapus di sini (dilewati bila cloud kosong, demi keamanan)
+      for (const k of Object.keys(st.months)) {
+        if (!cloudMap.has(k) && !d.months.includes(k)) { await db.tx.where('bulan').equals(fromMk(k)).delete(); delete st.months[k]; changed = true; }
+      }
+    }
+    if (!d.batal) {
+      const { data: bm, error: e3 } = await sb.from('rekap_meta').select('key,value,ver').in('key', ['batalFaktur', 'batalLine']);
+      if (e3) throw e3;
+      const cf = (bm || []).find(r => r.key === 'batalFaktur'), cl = (bm || []).find(r => r.key === 'batalLine');
+      if (cf && cf.ver !== st.batalVer) {
+        await setMetaVal('batalFaktur', Array.isArray(cf.value) ? cf.value : []); await setMetaVal('batalLine', (cl && Array.isArray(cl.value)) ? cl.value : []);
+        st.batalVer = cf.ver; changed = true;
+      }
+    }
+    await setMetaVal('syncState', st);
+    if (changed) { await syncRebuildMeta(); await loadBatalFaktur(); }
+    return changed;
+  }
+  async function syncApplyUi(){
+    const shown = document.getElementById('result').style.display === 'block';
+    const total = await db.tx.count();
+    if (!shown && total) await restoreFromDB(); else await refreshAfterDataChange();
+  }
+  async function syncFirstTime(st){
+    const localCount = await db.tx.count();
+    const { data: list, error } = await sb.from('rekap_months').select('bulan');
+    if (error) throw error;
+    const cloudKeys = (list || []).map(x => x.bulan);
+    if (localCount && cloudKeys.length) { _syncNeedsChoice = true; setSyncUi('Pilih arah sinkronisasi di panel ☁️.', true); renderSyncPanel(); document.getElementById('syncOverlay').classList.add('show'); return false; }
+    _syncNeedsChoice = false; st.init = true; await setMetaVal('syncState', st);
+    if (localCount && !cloudKeys.length) await syncMarkAll();
+    return true;
+  }
+  async function syncChoose(dir){
+    if (!sbUser || _syncBusy) return;
+    if (!confirm(dir === 'up' ? 'Data di cloud akan DITIMPA oleh data perangkat ini. Lanjutkan?' : 'Data di perangkat ini akan DITIMPA oleh data cloud. Lanjutkan?')) return;
+    _syncBusy = true;
+    try {
+      const { data: list, error } = await sb.from('rekap_months').select('bulan'); if (error) throw error;
+      const cloudKeys = (list || []).map(x => x.bulan);
+      const st = await getSyncState(); st.init = true; st.months = {}; st.batalVer = '';
+      if (dir === 'up') { await setMetaVal('syncState', st); _syncBusy = false; _syncNeedsChoice = false; await syncMarkAll(cloudKeys); await syncNow({ force:true }); return; }
+      const local = await syncLocalMonthKeys();
+      for (const k of local) if (!cloudKeys.includes(k)) await db.tx.where('bulan').equals(fromMk(k)).delete();
+      await setMetaVal('syncState', st); await setMetaVal('syncDirty', { months:[], batal:false });
+      _syncBusy = false; _syncNeedsChoice = false; await syncNow({ force:true });
+    } catch(e){ console.warn('syncChoose', e); setSyncUi('Gagal: ' + (e.message || e), true); }
+    finally { _syncBusy = false; renderSyncPanel(); }
+  }
+  async function syncNow(opts){
+    opts = opts || {};
+    if (!sb || !sbUser || !useIDB || !db || _syncBusy) return;
+    if (_inFlightWorker && !opts.force) return;
+    if (_syncNeedsChoice) { renderSyncPanel(); return; }
+    _syncBusy = true; setSyncUi('Menyinkronkan…', false, 'busy');
+    try {
+      const { data: sess } = await sb.auth.getSession();
+      if (!sess.session) { sbUser = null; throw new Error('Sesi login berakhir, silakan masuk lagi.'); }
+      const st = await getSyncState();
+      if (!st.init) { const go = await syncFirstTime(st); if (!go) { return; } }
+      await syncPush();
+      if (await syncPull()) await syncApplyUi();
+      setSyncUi('Tersinkron ' + new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' }), false);
+    } catch(e){
+      console.warn('syncNow', e);
+      setSyncUi('Gagal sinkron: ' + ((e && (e.message || e.details)) || e), true);
+    } finally { _syncBusy = false; renderSyncPanel(); }
+  }
+  async function syncInit(){
+    if (!window.supabase || !window.supabase.createClient) { setSyncUi('Supabase tidak termuat (offline?).', true); return; }
+    sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession:true, autoRefreshToken:true, storageKey:'rekap-sb-auth' } });
+    const { data } = await sb.auth.getSession(); sbUser = data.session ? data.session.user : null;
+    sb.auth.onAuthStateChange((ev, session) => { sbUser = session ? session.user : null; if (ev === 'SIGNED_OUT') setSyncUi('', false); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
+    window.addEventListener('online', () => syncNow());
+    setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_POLL_MS);
+    if (sbUser) await syncNow(); else setSyncUi('Belum masuk. Klik ☁️ untuk login.', false);
+  }
+  // =================== AKHIR SINKRONISASI CLOUD ===================
+
   (async function init(){
     initTheme();
     await initDB();
     await restoreFromDB();
     try { await refreshAutoBatalBadgeOnly(); } catch(e){}
+    try { await syncInit(); } catch(e){ console.warn('syncInit gagal', e); }
   })();
 
   if ('serviceWorker' in navigator){ window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('SW gagal daftar', e)); }); }
