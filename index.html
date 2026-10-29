@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PENJUALAN</title>
+<title>Pembanding Pajak Konsultan</title>
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#1f4e78">
 <meta name="mobile-web-app-capable" content="yes">
@@ -380,7 +380,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
 <body>
 <header>
   <div class="wrap header-row">
-    <div class="header-left"><div class="header-title">Data Penjualan</div></div>
+    <div class="header-left"><div class="header-title">Pembanding Pajak Konsultan</div></div>
     <button type="button" id="installBtn" style="display:none;padding:3px 8px;border:1px solid rgba(255,255,255,.5);border-radius:5px;background:rgba(255,255,255,.12);color:#fff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;line-height:1.1">⬇ Instal Aplikasi</button>
     <div style="display:flex;align-items:center;gap:10px">
       <button type="button" class="theme-btn" id="syncBtn" onclick="openSyncPanel()" title="Sinkronisasi cloud">☁️<span id="syncDot"></span></button>
@@ -504,6 +504,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
             </div>
           </div>
           <div class="month-quick mq-bulan">
+            <span id="cpPeriodeLbl" style="display:none;font-weight:800;font-size:15px;color:var(--strong);margin-right:6px">Pajak Periode</span>
             <label for="filterMonth">Bulan</label>
             <select id="filterMonth" onchange="applyFilters()"><option value="">Semua bulan</option></select>
           </div>
@@ -1918,7 +1919,6 @@ self.onmessage = function(e){
     panel.innerHTML =
       '<div style="padding:10px 4px 4px">' +
         '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px">' +
-          '<span style="font-weight:800;color:var(--strong)">Pajak Periode ' + periode + '</span>' +
           '<div style="position:relative;display:inline-block">' +
             '<button type="button" class="action-toggle" onclick="cpToggleMenu(event)" title="Pengaturan perhitungan pajak">🧾 Pengaturan <span class="chev">▼</span></button>' +
             '<div id="cpMenu" onclick="event.stopPropagation()" style="display:' + (cpMenuOpen ? 'block' : 'none') + ';position:absolute;left:0;top:calc(100% + 6px);z-index:100;background:var(--menu-bg);box-shadow:var(--menu-shadow);border-radius:10px;padding:14px;width:270px;max-width:calc(100vw - 24px);box-sizing:border-box">' +
@@ -2174,6 +2174,7 @@ self.onmessage = function(e){
     document.getElementById('colPicker').style.display = (t === 's0') ? 'block' : 'none';
     closeColPicker();
     ['.quick-search-wrap', '#actionDd', '.mq-pay'].forEach(q => { const e = document.querySelector(q); if (e) e.style.display = (t === 's9') ? 'none' : ''; });
+    { const pl = document.getElementById('cpPeriodeLbl'); if (pl) pl.style.display = (t === 's9') ? '' : 'none'; }
     document.querySelectorAll('#table .view').forEach(v => v.style.display = 'none');
     const panel = document.getElementById('panel_' + t);
     if (panel) panel.style.display = 'block';
