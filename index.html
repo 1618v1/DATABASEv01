@@ -474,7 +474,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
           <div class="tabs" id="tabsMenu">
             <button class="active" onclick="show('s6',this)">Faktur</button>
             <button onclick="show('s8',this)">Rekap Bulanan</button>
-            <button onclick="show('s9',this)">Cek Pajak</button>
+            <button id="tabCekPajak" onclick="show('s9',this)">Cek Pajak</button>
             <button id="tabTransaksi" style="display:none" onclick="show('s0',this)">Transaksi</button>
             <button id="tabSambalRefill" style="display:none" onclick="show('s7',this)">Sambal Refill</button>
             <button id="tabDaftarHarga" style="display:none" onclick="show('s10',this)">Daftar Harga</button>
@@ -3240,6 +3240,7 @@ self.onmessage = function(e){
     await initDB();
     try { if (useIDB && db) await db.tx.filter(r => r.produk && normProduk(r.produk) !== r.produk).modify(r => { r.produk = normProduk(r.produk); }); } catch(e){ console.warn('normalisasi nama produk gagal', e); }
     await restoreFromDB();
+    try { const cp = document.getElementById('tabCekPajak'); if (cp) cp.click(); } catch(e){} // buka langsung tab Cek Pajak
     try { await refreshAutoBatalBadgeOnly(); } catch(e){}
     try { await syncInit(); } catch(e){ console.warn('syncInit gagal', e); }
   })();
