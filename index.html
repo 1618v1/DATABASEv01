@@ -1773,10 +1773,11 @@ self.onmessage = function(e){
     inp.click();
   }
   function cpInvDel(mk, no){ if (!confirm('Hapus invoice ' + no + '?')) return; cpInv[mk] = (cpInv[mk] || []).filter(x => x.no !== no); if (!cpInv[mk].length) delete cpInv[mk]; cpInvSave(); renderCekPajak(); }
+  function cpInvDelMonth(mk){ const n = (cpInv[mk] || []).length; if (!n || !confirm('Hapus SEMUA ' + n + ' invoice ' + monthLabel(mk) + '?')) return; delete cpInv[mk]; cpInvSave(); renderCekPajak(); }
   function cpInvJenis(mk, no, v){ const iv = (cpInv[mk] || []).find(x => x.no === no); if (iv){ iv.jenis = v; cpInvSave(); renderCekPajak(); } }
   function cpInvHtml(rpl){
     const mk = filters.month, tdn = 'class="num"', th = 'style="text-align:right"';
-    const btn = '<button type="button" class="action-toggle" onclick="cpPickInvoices()">⬆ Upload Invoice (Excel)</button>';
+    const btn = '<button type="button" class="action-toggle" onclick="cpPickInvoices()">⬆ Upload Invoice (Excel)</button>' + (mk && (cpInv[mk] || []).length ? ' <button type="button" class="action-toggle" onclick="cpInvDelMonth(\'' + mk + '\')" style="color:var(--red)">🗑 Hapus semua invoice bulan ini</button>' : '');
     let body = '';
     if (mk){
       const list = (cpInv[mk] || []).slice().sort((x, y) => x.no < y.no ? -1 : 1);
@@ -1787,7 +1788,7 @@ self.onmessage = function(e){
           const g = list.filter(x => x.jenis === j); if (!g.length) return;
           let sj = 0, sd = 0, sp = 0, st = 0, ss = 0;
           g.forEach(iv => { const c = cpInvCalc(iv); sj += iv.jumlah; sd += iv.disc; st += iv.total; ss += c.dpp; sp += c.ppn;
-            rows.push('<tr><td>' + escHtml(iv.no) + '<div style="font-size:10px;color:var(--muted)">' + escHtml(iv.tgl + ' • ' + iv.cust) + '</div></td>' +
+            rows.push('<tr><td>' + escHtml(iv.no) + '<div style="font-size:10px;color:var(--muted)">' + escHtml(iv.tgl + ' • ' + iv.cust) + '</div><button type="button" onclick="cpInvDel(\'' + mk + '\',\'' + iv.no + '\')" style="margin-top:3px;font-size:11px;padding:2px 8px;border:1px solid var(--red);color:var(--red);background:transparent;border-radius:6px;cursor:pointer">🗑 Hapus</button></td>' +
               '<td><select onchange="cpInvJenis(\'' + mk + '\',\'' + iv.no + '\',this.value)" style="font-size:11px">' + ['Fitri', 'Rupa2'].map(o => '<option' + (o === iv.jenis ? ' selected' : '') + '>' + o + '</option>').join('') + '</select></td>' +
               '<td ' + tdn + '>' + rpl(iv.jumlah) + '</td><td ' + tdn + '>− ' + rpl(iv.disc) + '</td><td ' + tdn + '>' + rpl(iv.total) + '</td><td ' + tdn + '>' + rpl(c.dpp) + '</td><td ' + tdn + '><b>' + rpl(c.ppn) + '</b></td>' +
               '<td><button type="button" onclick="cpInvDel(\'' + mk + '\',\'' + iv.no + '\')" title="Hapus" style="border:0;background:none;cursor:pointer">✕</button></td></tr>'); });
@@ -1803,7 +1804,7 @@ self.onmessage = function(e){
         '<div class="tablebox" style="max-height:none;margin-top:8px"><table class="mrk" style="min-width:0"><thead><tr><th>Bulan</th><th ' + th + '>Invoice</th><th ' + th + '>PPN Fitri</th><th ' + th + '>PPN Rupa2</th><th ' + th + '>Total PPN Masukan</th></tr></thead><tbody>' +
         ks.map(k => { const l = cpInv[k], pj = j => l.filter(x => x.jenis === j).reduce((q, x) => q + cpInvCalc(x).ppn, 0); return '<tr><td>' + monthLabel(k) + '</td><td ' + tdn + '>' + l.length + '</td><td ' + tdn + '>' + rpl(pj('Fitri')) + '</td><td ' + tdn + '>' + rpl(pj('Rupa2')) + '</td><td ' + tdn + '><b>' + rpl(cpInvSum(k)) + '</b></td></tr>'; }).join('') + '</tbody></table></div>';
     }
-    return '<details open style="margin:6px 2px 8px;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--card)"><summary style="cursor:pointer;font-weight:800;color:var(--strong);font-size:13px">📥 PPN Masukan Bulanan dari Invoice</summary><div style="margin-top:8px">' + btn + '</div>' + body + '</details>';
+    return '<div style="margin:6px 2px 8px;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--card)"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-weight:800;color:var(--strong);font-size:13px">📥 PPN Masukan Bulanan dari Invoice</span><span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">' + btn + '</span></div>' + body + '</div>';
   }
   const CPO_KEY = 'cekpajak-opex-v1';
   let cpOpex = {};
