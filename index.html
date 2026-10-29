@@ -517,10 +517,11 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
           <button type="button" class="action-toggle" onclick="toggleActionMenu(event)" title="Menu Aksi"><span>⚙ Aksi</span><span class="chev">▼</span></button>
           <div class="action-menu" onclick="event.stopPropagation()">
             <button type="button" id="menuTransaksi" onclick="closeActionMenu();document.getElementById('tabTransaksi').click()" title="Tampilkan laporan Transaksi detail">📋 Transaksi</button>
-            <button type="button" id="menuSambalRefill" onclick="closeActionMenu();document.getElementById('tabSambalRefill').click()" title="Tampilkan laporan Sambal Refill 600ml">🧴 Sambal Refill</button>
             <button type="button" id="menuDaftarHarga" onclick="closeActionMenu();document.getElementById('tabDaftarHarga').click()" title="Tampilkan daftar harga beli & harga jual per produk">💲 Daftar Harga</button>
             <button type="button" id="autoBatalToolbarBtn" onclick="openAutoBatalDetectModal()" title="Cari otomatis faktur bernilai nol dan pasangan qty +/- yang kemungkinan transaksi batal">🔁 Cek Batal Otomatis<span id="autoBatalBadge"></span></button>
             <button type="button" id="toolbarSaveExcel" onclick="saveExcelTab(_activeTab||'s0')">💾 Simpan Excel</button>
+            <button type="button" id="menuSambalRefill" style="font-size:11px;opacity:.55;text-align:center" onclick="srToggle()">SR600</button>
+            <div id="srPinBox" style="display:none;text-align:center;margin-top:4px"><input id="srPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="masukkan PIN" onkeydown="if(event.key==='Enter')srCheck()" style="width:96px;font-size:10px;text-align:center;padding:3px 4px;border:1px solid var(--input-border);border-radius:6px;background:var(--input-bg);color:var(--input-text);opacity:.6"></div>
           </div>
         </div>
       </div>
@@ -1237,7 +1238,15 @@ self.onmessage = function(e){
     if (ad && ad.classList.contains('open') && !ad.contains(e.target)) closeActionMenu();
   });
   function toggleActionMenu(e){ if (e) e.stopPropagation(); const dd = document.getElementById('actionDd'); if (dd) dd.classList.toggle('open'); }
-  function closeActionMenu(){ const dd = document.getElementById('actionDd'); if (dd) dd.classList.remove('open'); }
+  function closeActionMenu(){ const dd = document.getElementById('actionDd'); if (dd) dd.classList.remove('open'); srHide(); }
+  // PIN SR600 (disamarkan; PIN tidak disimpan sebagai teks)
+  const SR_H = '1mtpzv7yyrd';
+  function srHash(s){ let a = 0xdeadbeef, b = 0x41c6ce57; for (let i = 0; i < s.length; i++){ const c = s.charCodeAt(i); a = Math.imul(a ^ c, 2654435761); b = Math.imul(b ^ c, 1597334677); } a = Math.imul(a ^ (a >>> 16), 2246822507) ^ Math.imul(b ^ (b >>> 13), 3266489909); b = Math.imul(b ^ (b >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909); return (4294967296 * (2097151 & b) + (a >>> 0)).toString(36); }
+  function srHide(){ const bx = document.getElementById('srPinBox'), i = document.getElementById('srPin'); if (bx) bx.style.display = 'none'; if (i){ i.value = ''; i.placeholder = 'masukkan PIN'; } }
+  function srToggle(){ const bx = document.getElementById('srPinBox'); if (!bx) return; const open = bx.style.display === 'none'; bx.style.display = open ? 'block' : 'none'; if (open) setTimeout(() => { const i = document.getElementById('srPin'); if (i) i.focus(); }, 30); }
+  function srCheck(){ const i = document.getElementById('srPin'); if (!i) return;
+    if (srHash('sr600:' + i.value.trim()) === SR_H){ closeActionMenu(); document.getElementById('tabSambalRefill').click(); }
+    else { i.value = ''; i.placeholder = 'PIN salah'; } }
   function buildColPicker(){
     document.getElementById('colPickerMenu').innerHTML = TX_COLS.map(c =>
       '<label><input type="checkbox" data-k="' + c.k + '" ' + (colVis[c.k]?'checked':'') + ' onchange="onColChange(this)"> ' + c.label + '</label>').join('');
@@ -1681,10 +1690,11 @@ self.onmessage = function(e){
   const CP_KEY = 'cekpajak-settings-v1';
   let cpSet = { tarif: 11, jualIncl: 'Ya', hppIncl: 'Ya', sambal: 'Tidak', pphTarif: 22, omzetTahun: '' };
   try { const s = JSON.parse(localStorage.getItem(CP_KEY) || 'null'); if (s) cpSet = Object.assign(cpSet, s); } catch(e){}
+  cpSet.sambal = 'Tidak'; // produk non-PKP: selalu dikeluarkan dari hitungan pajak (filter disembunyikan)
   const CPM_KEY = 'cekpajak-manual-v1';
   let cpManual = {};
   try { cpManual = JSON.parse(localStorage.getItem(CPM_KEY) || '{}') || {}; } catch(e){ cpManual = {}; }
-  function cpManualVal(mk){ if (!mk) return null; const v = cpManual[mk]; return (v == null || v === '' || !isFinite(v)) ? null : Number(v); }
+  function cpManualVal(mk){ if (!mk) return null; const iv = cpInvSum(mk); if (iv != null) return iv; const v = cpManual[mk]; return (v == null || v === '' || !isFinite(v)) ? null : Number(v); }
   function cpSetManual(raw){
     const mk = filters.month; if (!mk) return;
     let t = String(raw == null ? '' : raw).trim();
@@ -1692,6 +1702,108 @@ self.onmessage = function(e){
     else { t = t.replace(/[^0-9,]/g, '').replace(',', '.'); const n = parseFloat(t); if (isFinite(n) && n >= 0) cpManual[mk] = n; else delete cpManual[mk]; }
     try { localStorage.setItem(CPM_KEY, JSON.stringify(cpManual)); } catch(e){}
     renderCekPajak();
+  }
+
+  // ===== PPN MASUKAN dari INVOICE (upload Excel per bulan; Fitri vs Rupa2) =====
+  let cpSub = 'bayar';
+  function cpSubTab(k){ cpSub = k; renderCekPajak(); }
+  const CPI_KEY = 'cekpajak-invoices-v1';
+  let cpInv = {};
+  try { cpInv = JSON.parse(localStorage.getItem(CPI_KEY) || '{}') || {}; } catch(e){ cpInv = {}; }
+  function cpInvSave(){ try { localStorage.setItem(CPI_KEY, JSON.stringify(cpInv)); } catch(e){} }
+  function cpInvCalc(iv){ const t = N(cpSet.tarif) / 100, dpp = iv.total / (1 + t); return { dpp, ppn: Math.floor(dpp * t) }; }
+  function cpInvSum(mk){ const a = mk && cpInv[mk]; if (!a || !a.length) return null; return a.reduce((q, iv) => q + cpInvCalc(iv).ppn, 0); }
+  function cpParseInvoice(a, fname){
+    const txt = v => String(v == null ? '' : v).trim(), low = v => txt(v).toLowerCase();
+    const numv = v => (typeof v === 'number' && isFinite(v)) ? v : null;
+    const lastNum = r => { for (let i = r.length - 1; i >= 0; i--){ const n = numv(r[i]); if (n != null) return n; } return null; };
+    const after = (r, i) => { for (let k = i + 1; k < r.length; k++){ if (txt(r[k]) !== '') return r[k]; } return ''; };
+    let no = '', tgl = null, cust = '', hdr = -1, jumlah = null, totalCell = null, disc = 0;
+    a.forEach((r, ri) => { (r || []).forEach((c, ci) => {
+      const l = low(c);
+      if (l === 'invoice no.' || l === 'invoice no') no = txt(after(r, ci));
+      else if (l === 'invoice date') tgl = after(r, ci);
+      else if (l === 'customer') cust = txt(after(r, ci));
+      else if (l === 'deskripsi' && hdr < 0) hdr = ri;
+    }); });
+    if (hdr < 0) return null;
+    const h = a[hdr].map(low), dI = h.indexOf('deskripsi'), qI = h.indexOf('qty'), hI = h.findIndex(x => x.startsWith('harga'));
+    let items = [], endRow = a.length;
+    for (let ri = hdr + 1; ri < a.length; ri++){
+      const r = a[ri] || [], lab = r.map(low);
+      if (lab.some(x => x === 'jumlah')) { jumlah = lastNum(r); endRow = ri; break; }
+      const d = txt(r[dI]); if (!d) continue;
+      let amt = numv(r[r.length - 1]) != null ? lastNum(r) : null;
+      if (amt == null && qI >= 0 && hI >= 0 && numv(r[qI]) != null && numv(r[hI]) != null) amt = r[qI] * r[hI];
+      if (amt != null) items.push({ d, amt });
+    }
+    const sum = items.reduce((q, x) => q + x.amt, 0); if (jumlah == null) jumlah = sum;
+    for (let ri = endRow; ri < a.length; ri++){
+      (a[ri] || []).forEach(c => { const l = low(c), r = a[ri];
+        if (l.startsWith('discount') || l.startsWith('diskon')) disc += (lastNum(r) || 0);
+        else if (l.startsWith('total include') || l.startsWith('total incl')) totalCell = lastNum(r);
+      });
+    }
+    let d = tgl instanceof Date ? tgl : null;
+    if (!d){ const m = txt(tgl).match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/); if (m){ let y = +m[3]; if (y < 100) y += 2000; d = new Date(y, +m[2] - 1, +m[1]); } }
+    if (!d || isNaN(d.getTime()) || !no) return null;
+    const total = totalCell != null ? totalCell : jumlah - disc;
+    const jenis = items.some(x => /fitri/i.test(x.d)) ? 'Fitri' : 'Rupa2';
+    const mk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    return { mk, iv: { no, tgl: d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear(), cust, jenis, jumlah, disc, total, file: fname } };
+  }
+  function cpPickInvoices(){
+    const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = '.xlsx,.xls';
+    inp.onchange = async () => {
+      let ok = 0, dup = 0; const bad = [];
+      for (const f of inp.files){
+        try {
+          const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
+          const a = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+          const r = cpParseInvoice(a, f.name);
+          if (!r) { bad.push(f.name); continue; }
+          const list = cpInv[r.mk] = cpInv[r.mk] || [];
+          if (list.some(x => x.no === r.iv.no)) { dup++; continue; }
+          list.push(r.iv); ok++;
+        } catch(e){ bad.push(f.name); }
+      }
+      cpInvSave(); renderCekPajak();
+      alert(ok + ' invoice ditambahkan' + (dup ? ', ' + dup + ' dilewati (No. invoice sudah ada)' : '') + (bad.length ? '\nGagal dibaca: ' + bad.join(', ') : ''));
+    };
+    inp.click();
+  }
+  function cpInvDel(mk, no){ if (!confirm('Hapus invoice ' + no + '?')) return; cpInv[mk] = (cpInv[mk] || []).filter(x => x.no !== no); if (!cpInv[mk].length) delete cpInv[mk]; cpInvSave(); renderCekPajak(); }
+  function cpInvJenis(mk, no, v){ const iv = (cpInv[mk] || []).find(x => x.no === no); if (iv){ iv.jenis = v; cpInvSave(); renderCekPajak(); } }
+  function cpInvHtml(rpl){
+    const mk = filters.month, tdn = 'class="num"', th = 'style="text-align:right"';
+    const btn = '<button type="button" class="action-toggle" onclick="cpPickInvoices()">⬆ Upload Invoice (Excel)</button>';
+    let body = '';
+    if (mk){
+      const list = (cpInv[mk] || []).slice().sort((x, y) => x.no < y.no ? -1 : 1);
+      if (!list.length) body = '<div style="color:var(--muted);font-size:12px;padding:6px 2px">Belum ada invoice untuk ' + monthLabel(mk) + '. Upload beberapa invoice sekaligus; bulan dibaca dari tanggal invoice.</div>';
+      else {
+        const rows = [], tot = {}; 
+        ['Fitri', 'Rupa2'].forEach(j => {
+          const g = list.filter(x => x.jenis === j); if (!g.length) return;
+          let sj = 0, sd = 0, sp = 0, st = 0, ss = 0;
+          g.forEach(iv => { const c = cpInvCalc(iv); sj += iv.jumlah; sd += iv.disc; st += iv.total; ss += c.dpp; sp += c.ppn;
+            rows.push('<tr><td>' + escHtml(iv.no) + '<div style="font-size:10px;color:var(--muted)">' + escHtml(iv.tgl + ' • ' + iv.cust) + '</div></td>' +
+              '<td><select onchange="cpInvJenis(\'' + mk + '\',\'' + iv.no + '\',this.value)" style="font-size:11px">' + ['Fitri', 'Rupa2'].map(o => '<option' + (o === iv.jenis ? ' selected' : '') + '>' + o + '</option>').join('') + '</select></td>' +
+              '<td ' + tdn + '>' + rpl(iv.jumlah) + '</td><td ' + tdn + '>− ' + rpl(iv.disc) + '</td><td ' + tdn + '>' + rpl(iv.total) + '</td><td ' + tdn + '>' + rpl(c.dpp) + '</td><td ' + tdn + '><b>' + rpl(c.ppn) + '</b></td>' +
+              '<td><button type="button" onclick="cpInvDel(\'' + mk + '\',\'' + iv.no + '\')" title="Hapus" style="border:0;background:none;cursor:pointer">✕</button></td></tr>'); });
+          rows.push('<tr style="font-weight:800;background:var(--card)"><td colspan="2">Subtotal Invoice ' + j + ' (' + g.length + ')</td><td ' + tdn + '>' + rpl(sj) + '</td><td ' + tdn + '>− ' + rpl(sd) + '</td><td ' + tdn + '>' + rpl(st) + '</td><td ' + tdn + '>' + rpl(ss) + '</td><td ' + tdn + '>' + rpl(sp) + '</td><td></td></tr>');
+        });
+        const all = cpInvSum(mk);
+        body = '<div class="tablebox" style="max-height:none;margin-top:8px"><table class="mrk" style="min-width:0"><thead><tr><th>No. Invoice</th><th>Jenis</th><th ' + th + '>Jumlah barang</th><th ' + th + '>Discount 1+2</th><th ' + th + '>Total include PPN</th><th ' + th + '>DPP (÷ ' + (1 + N(cpSet.tarif) / 100).toLocaleString('id-ID') + ')</th><th ' + th + '>PPN ' + N(cpSet.tarif) + '%</th><th></th></tr></thead><tbody>' + rows.join('') +
+          '<tr style="font-weight:800"><td colspan="6">TOTAL PPN MASUKAN ' + monthLabel(mk).toUpperCase() + ' (dipakai di perhitungan)</td><td ' + tdn + '>' + rpl(all) + '</td><td></td></tr></tbody></table></div>';
+      }
+    } else {
+      const ks = Object.keys(cpInv).sort();
+      body = !ks.length ? '<div style="color:var(--muted);font-size:12px;padding:6px 2px">Belum ada invoice. Klik Upload, lalu pilih satu bulan di filter Bulan untuk melihat rincian.</div>' :
+        '<div class="tablebox" style="max-height:none;margin-top:8px"><table class="mrk" style="min-width:0"><thead><tr><th>Bulan</th><th ' + th + '>Invoice</th><th ' + th + '>PPN Fitri</th><th ' + th + '>PPN Rupa2</th><th ' + th + '>Total PPN Masukan</th></tr></thead><tbody>' +
+        ks.map(k => { const l = cpInv[k], pj = j => l.filter(x => x.jenis === j).reduce((q, x) => q + cpInvCalc(x).ppn, 0); return '<tr><td>' + monthLabel(k) + '</td><td ' + tdn + '>' + l.length + '</td><td ' + tdn + '>' + rpl(pj('Fitri')) + '</td><td ' + tdn + '>' + rpl(pj('Rupa2')) + '</td><td ' + tdn + '><b>' + rpl(cpInvSum(k)) + '</b></td></tr>'; }).join('') + '</tbody></table></div>';
+    }
+    return '<details open style="margin:6px 2px 8px;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--card)"><summary style="cursor:pointer;font-weight:800;color:var(--strong);font-size:13px">📥 PPN Masukan Bulanan dari Invoice</summary><div style="margin-top:8px">' + btn + '</div>' + body + '</details>';
   }
   const CPO_KEY = 'cekpajak-opex-v1';
   let cpOpex = {};
@@ -1812,16 +1924,16 @@ self.onmessage = function(e){
               '<div class="filter-group"><label>Tarif PPN (%)</label><input type="number" min="0" max="100" step="0.1" value="' + tp + '" onchange="cpOnChange(\'tarif\', this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)"></div>' +
               '<div class="filter-group"><label>Harga jual sudah incl. PPN?</label>' + sel('jualIncl', ['Ya','Tidak']) + '</div>' +
               '<div class="filter-group"><label>HPP sudah incl. PPN?</label>' + sel('hppIncl', ['Ya','Tidak']) + '</div>' +
-              '<div class="filter-group"><label>Sertakan Sambal Refill 600ml?</label>' + sel('sambal', ['Tidak','Ya']) + '</div>' +
               '<div class="filter-group"><label>Tarif PPh badan (%)</label><input type="number" min="0" max="100" step="0.1" value="' + N(cpSet.pphTarif) + '" onchange="cpOnChange(\'pphTarif\', this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)"></div>' +
               '<div class="filter-group"><label>Omzet setahun (Rp) — kosong = otomatis</label><input type="text" inputmode="numeric" placeholder="otomatis" value="' + (N(cpSet.omzetTahun) > 0 ? Math.round(N(cpSet.omzetTahun)).toLocaleString('id-ID') : '') + '" onchange="cpOnChange(\'omzetTahun\', this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)"></div>' +
               '<div class="filter-info">Pengaturan tersimpan otomatis di browser ini.</div>' +
             '</div>' +
           '</div>' +
           '<span style="font-size:11px;color:var(--muted)">Tarif ' + tp + '% • Jual ' + (cpSet.jualIncl === 'Ya' ? 'incl.' : 'excl.') + ' PPN • HPP ' + (cpSet.hppIncl === 'Ya' ? 'incl.' : 'excl.') + ' PPN' + (cpSet.sambal === 'Ya' ? ' • + Sambal Refill' : '') + '</span>' +
+          [['bayar', '💰 PPN yg Dibayar'], ['inv', '📥 PPN Masukan'], ['pph', '🏢 PPh Badan'], ['pan', '📘 Panduan']].map(b => '<button type="button" class="action-toggle" onclick="cpSubTab(\'' + b[0] + '\')" style="' + (cpSub === b[0] ? 'font-weight:800;box-shadow:inset 0 -2px 0 var(--strong)' : '') + '">' + b[1] + '</button>').join('') +
           '<button type="button" class="action-toggle" onclick="saveCekPajakExcel()" style="margin-left:auto">Save Excel</button>' +
         '</div>' +
-        '<div class="kpis" style="grid-template-columns:repeat(4,1fr)">' +
+        (cpSub === 'bayar' ? '<div class="kpis" style="grid-template-columns:repeat(4,1fr)">' +
           '<div class="kpi"><small>PPN Keluaran</small><b>' + rpl(c.ppnK) + '</b></div>' +
           '<div class="kpi"><small>PPN Masukan ' + (c.usedManual ? '(faktur)' : '(estimasi)') + '</small><b>' + rpl(c.ppnM) + '</b></div>' +
           '<div class="kpi"><small>' + (lebih ? 'Lebih Bayar' : 'Kurang Bayar (disetor)') + '</small><b style="color:' + statusClr + '">' + rpn(Math.abs(c.diff)) + '</b></div>' +
@@ -1836,14 +1948,15 @@ self.onmessage = function(e){
           row('DPP pembelian', cpSet.hppIncl === 'Ya' ? 'HPP ÷ (1 + ' + tp + '%)' : 'HPP (belum incl. PPN)', rpl(c.dppB)) +
           row('PPN masukan estimasi dari HPP', 'DPP pembelian × ' + tp + '%', rpl(c.ppnMEst)) +
           '<tr><td>PPN masukan sesuai faktur pajak <span style="color:var(--muted)">(isi manual)</span></td><td class="num">' +
-            (filters.month ? '<input type="text" inputmode="numeric" placeholder="Rp 0" value="' + (mval != null ? Math.round(mval).toLocaleString('id-ID') : '') + '" onchange="cpSetManual(this.value)" style="width:150px;text-align:right;box-sizing:border-box;padding:4px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)">' : '<span style="color:var(--muted)">—</span>') +
+            (filters.month ? '<input type="text" inputmode="numeric" placeholder="Rp 0" value="' + (mval != null ? Math.round(mval).toLocaleString('id-ID') : '') + '" onchange="cpSetManual(this.value)"' + (cpInvSum(filters.month) != null ? ' readonly title="Otomatis dari invoice yang diupload"' : '') + ' style="width:150px;text-align:right;box-sizing:border-box;padding:4px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)">' : '<span style="color:var(--muted)">—</span>') +
             '</td><td style="color:var(--muted)">' + (filters.month ? 'Isi total PPN masukan dari faktur pajak bulan ini; kosongkan jika belum ada' : 'Pilih satu bulan di filter Bulan untuk mengisi') + '</td></tr>' +
           row('PPN masukan yang dipakai', c.usedManual ? 'Angka faktur pajak (diisi manual)' : 'Estimasi HPP (belum ada angka faktur pajak)', rpl(c.ppnM), true) +
           row('PPN KURANG / (LEBIH) BAYAR', 'PPN keluaran − PPN masukan yang dipakai', rpn(c.diff), true) +
           '</tbody></table></div>' +
-        '<div style="margin:10px 2px;font-size:13px;font-weight:800;color:' + statusClr + '">' + statusTxt + '</div>' +
-        pphHtml +
-        '<details open style="margin:6px 2px 4px;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--card)">' +
+        '<div style="margin:10px 2px;font-size:13px;font-weight:800;color:' + statusClr + '">' + statusTxt + '</div>' : '') +
+        (cpSub === 'inv' ? cpInvHtml(rpl) : '') +
+        (cpSub === 'pph' ? pphHtml : '') +
+        (cpSub === 'pan' ? '<details open style="margin:6px 2px 4px;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--card)">' +
           '<summary style="cursor:pointer;font-weight:800;color:var(--strong);font-size:13px">📘 Panduan & Rumus</summary>' +
           '<div style="font-size:12.5px;line-height:1.65;color:var(--text);margin-top:8px">' +
             '<div style="font-weight:800;color:var(--strong)">1. Arti istilah</div>' +
@@ -1873,7 +1986,7 @@ self.onmessage = function(e){
               '<li>Sejak 2025 tarif PPN 12% dengan DPP nilai lain 11/12 untuk barang non-mewah, sehingga beban efektifnya tetap 11%. Konfirmasikan ke konsultan pajak / KPP sebelum membetulkan SPT.</li>' +
             '</ul>' +
           '</div>' +
-        '</details>' +
+        '</details>' : '') +
       '</div>';
     cpPlaceMenu();
   }
