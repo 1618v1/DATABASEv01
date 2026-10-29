@@ -1930,17 +1930,10 @@ self.onmessage = function(e){
               '<div class="filter-info">Pengaturan tersimpan otomatis di browser ini.</div>' +
             '</div>' +
           '</div>' +
-          '<span style="font-size:11px;color:var(--muted)">Tarif ' + tp + '% • Jual ' + (cpSet.jualIncl === 'Ya' ? 'incl.' : 'excl.') + ' PPN • HPP ' + (cpSet.hppIncl === 'Ya' ? 'incl.' : 'excl.') + ' PPN' + (cpSet.sambal === 'Ya' ? ' • + Sambal Refill' : '') + '</span>' +
           [['bayar', '💰 PPN yg Dibayar'], ['inv', '📥 PPN Masukan'], ['pph', '🏢 PPh Badan'], ['pan', '📘 Panduan']].map(b => '<button type="button" class="action-toggle" onclick="cpSubTab(\'' + b[0] + '\')" style="' + (cpSub === b[0] ? 'font-weight:800;box-shadow:inset 0 -2px 0 var(--strong)' : '') + '">' + b[1] + '</button>').join('') +
           '<button type="button" class="action-toggle" onclick="saveCekPajakExcel()" style="margin-left:auto">Save Excel</button>' +
         '</div>' +
-        (cpSub === 'bayar' ? '<div class="kpis" style="grid-template-columns:repeat(4,1fr)">' +
-          '<div class="kpi"><small>PPN Keluaran</small><b>' + rpl(c.ppnK) + '</b></div>' +
-          '<div class="kpi"><small>PPN Masukan ' + (c.usedManual ? '(faktur)' : '(estimasi)') + '</small><b>' + rpl(c.ppnM) + '</b></div>' +
-          '<div class="kpi"><small>' + (lebih ? 'Lebih Bayar' : 'Kurang Bayar (disetor)') + '</small><b style="color:' + statusClr + '">' + rpn(Math.abs(c.diff)) + '</b></div>' +
-          '<div class="kpi"><small>Jumlah baris</small><b>' + data.length.toLocaleString('id-ID') + '</b></div>' +
-        '</div>' +
-        '<div class="tablebox" style="max-height:none"><table class="mrk" style="min-width:0">' +
+        (cpSub === 'bayar' ? '<div class="tablebox" style="max-height:none"><table class="mrk" style="min-width:0">' +
           '<thead><tr><th style="text-align:left">Komponen</th><th>Rupiah</th><th style="text-align:left">Rumus</th></tr></thead><tbody>' +
           row('Total penjualan (kolom Total)', 'Jumlah kolom TOTAL', rpl(tj)) +
           row('Total HPP (Qty × Harga Beli)', 'Jumlah kolom HPP', rpl(th)) +
@@ -2180,7 +2173,7 @@ self.onmessage = function(e){
     
     document.getElementById('colPicker').style.display = (t === 's0') ? 'block' : 'none';
     closeColPicker();
-    ['.quick-search-wrap', '#actionDd'].forEach(q => { const e = document.querySelector(q); if (e) e.style.display = (t === 's9') ? 'none' : ''; });
+    ['.quick-search-wrap', '#actionDd', '.mq-pay'].forEach(q => { const e = document.querySelector(q); if (e) e.style.display = (t === 's9') ? 'none' : ''; });
     document.querySelectorAll('#table .view').forEach(v => v.style.display = 'none');
     const panel = document.getElementById('panel_' + t);
     if (panel) panel.style.display = 'block';
