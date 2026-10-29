@@ -1713,6 +1713,7 @@ self.onmessage = function(e){
     const lab = 'font-size:11px;font-weight:700;color:var(--subtle);text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:6px';
     const row = (a, f, v, strong) => '<tr' + (strong ? ' style="font-weight:800"' : '') + '><td>' + a + '</td><td class="num">' + v + '</td><td style="color:var(--muted)">' + f + '</td></tr>';
     const tp = N(cpSet.tarif);
+    const facTxt = (1 + tp / 100).toLocaleString('id-ID', { maximumFractionDigits: 4 });
     panel.innerHTML =
       '<div style="padding:10px 4px 4px">' +
         '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px">' +
@@ -1747,7 +1748,35 @@ self.onmessage = function(e){
           row('PPN KURANG / (LEBIH) BAYAR', 'PPN keluaran − PPN masukan', rpn(c.diff), true) +
           '</tbody></table></div>' +
         '<div style="margin:10px 2px;font-size:13px;font-weight:800;color:' + statusClr + '">' + statusTxt + '</div>' +
-        '<div class="mrk-note">PPN masukan hanya bisa dikreditkan jika Anda PKP dan supplier menerbitkan faktur pajak yang sah. Jika setoran PPN Anda sebesar PPN keluaran penuh, selisihnya sebesar PPN masukan (' + rpl(c.ppnM) + ') berarti belum dikreditkan. Konfirmasikan ke konsultan pajak / KPP sebelum membetulkan SPT. Data mengikuti filter Bulan, Pembayaran, dan Sales di atas; transaksi batal tidak ikut dihitung.</div>' +
+        '<details open style="margin:6px 2px 4px;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--card)">' +
+          '<summary style="cursor:pointer;font-weight:800;color:var(--strong);font-size:13px">📘 Panduan & Rumus</summary>' +
+          '<div style="font-size:12.5px;line-height:1.65;color:var(--text);margin-top:8px">' +
+            '<div style="font-weight:800;color:var(--strong)">1. Arti istilah</div>' +
+            '<ul style="margin:4px 0 10px 18px;padding:0">' +
+              '<li><b>DPP</b> (Dasar Pengenaan Pajak) = harga sebelum PPN.</li>' +
+              '<li><b>PPN Keluaran</b> = PPN yang Anda pungut dari customer saat menjual.</li>' +
+              '<li><b>PPN Masukan</b> = PPN yang sudah Anda bayar ke supplier saat membeli (ada di dalam harga beli / HPP).</li>' +
+              '<li><b>Kurang bayar</b> = PPN keluaran lebih besar, selisihnya disetor ke negara. <b>Lebih bayar</b> = PPN masukan lebih besar, selisihnya bisa dikompensasikan ke bulan berikutnya atau direstitusi.</li>' +
+            '</ul>' +
+            '<div style="font-weight:800;color:var(--strong)">2. Rumus (dengan angka periode ini)</div>' +
+            '<ol style="margin:4px 0 10px 18px;padding:0">' +
+              '<li>' + (cpSet.jualIncl === 'Ya' ? 'DPP penjualan = Total penjualan ÷ ' + facTxt + ' = ' + rpl(tj) + ' ÷ ' + facTxt + ' = <b>' + rpl(c.dppJ) + '</b>' : 'DPP penjualan = Total penjualan (harga jual belum termasuk PPN) = <b>' + rpl(c.dppJ) + '</b>') + '</li>' +
+              '<li>PPN keluaran = DPP penjualan × ' + tp + '% = ' + rpl(c.dppJ) + ' × ' + tp + '% = <b>' + rpl(c.ppnK) + '</b></li>' +
+              '<li>' + (cpSet.hppIncl === 'Ya' ? 'DPP pembelian = HPP ÷ ' + facTxt + ' = ' + rpl(th) + ' ÷ ' + facTxt + ' = <b>' + rpl(c.dppB) + '</b>' : 'DPP pembelian = HPP (belum termasuk PPN) = <b>' + rpl(c.dppB) + '</b>') + '</li>' +
+              '<li>PPN masukan = DPP pembelian × ' + tp + '% = ' + rpl(c.dppB) + ' × ' + tp + '% = <b>' + rpl(c.ppnM) + '</b></li>' +
+              '<li>PPN kurang / (lebih) bayar = PPN keluaran − PPN masukan = ' + rpl(c.ppnK) + ' − ' + rpl(c.ppnM) + ' = <b>' + rpn(c.diff) + '</b> <span style="color:var(--muted)">(dihitung dari angka sebelum pembulatan, selisih Rp1 bisa muncul)</span></li>' +
+            '</ol>' +
+            '<div style="font-weight:800;color:var(--strong)">3. Cek "kelebihan bayar"</div>' +
+            '<div style="margin:4px 0 10px">Bandingkan hasil di atas dengan PPN yang benar-benar Anda setor untuk periode ini. Jika yang disetor sebesar PPN keluaran penuh (' + rpl(c.ppnK) + '), berarti PPN masukan (' + rpl(c.ppnM) + ') belum dikreditkan: itulah kelebihan bayarnya. Jika yang disetor lebih besar lagi, kemungkinan PPN dihitung dua kali (harga sudah incl. PPN tetapi ditambah PPN lagi). Cek juga pilihan "Harga jual sudah incl. PPN" di menu Pengaturan.</div>' +
+            '<div style="font-weight:800;color:var(--strong)">4. Perlu diingat</div>' +
+            '<ul style="margin:4px 0 4px 18px;padding:0">' +
+              '<li>Hanya berlaku jika Anda <b>PKP</b>. PPN masukan hanya bisa dikreditkan bila supplier menerbitkan <b>faktur pajak</b> yang sah atas nama Anda.</li>' +
+              '<li>PPN masukan di sini adalah <b>estimasi dari HPP</b> (barang yang terjual). SPT sebenarnya memakai faktur pajak pembelian pada bulan tersebut, yang bisa berbeda bila stok bertambah atau berkurang.</li>' +
+              '<li>Data mengikuti filter Bulan, Pembayaran, dan Sales; transaksi batal tidak ikut dihitung. Sambal Refill 600ml ikut dihitung hanya bila diaktifkan di Pengaturan.</li>' +
+              '<li>Sejak 2025 tarif PPN 12% dengan DPP nilai lain 11/12 untuk barang non-mewah, sehingga beban efektifnya tetap 11%. Konfirmasikan ke konsultan pajak / KPP sebelum membetulkan SPT.</li>' +
+            '</ul>' +
+          '</div>' +
+        '</details>' +
       '</div>';
     cpPlaceMenu();
   }
