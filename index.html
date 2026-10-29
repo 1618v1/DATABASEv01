@@ -541,7 +541,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
 <div class="gmodal-overlay" id="syncOverlay" onclick="if(event.target===this) closeSyncPanel()">
   <div class="gmodal-box">
     <h3>☁️ Sinkronisasi Cloud</h3>
-    <div class="gmodal-sub">Data disimpan di Supabase agar sama di semua perangkat.</div>
+    <div class="gmodal-sub">Masuk dengan email dan password untuk mengambil data dari cloud (data disimpan di Supabase agar sama di semua perangkat).</div>
     <div id="syncLogin">
       <input class="sy-field" id="syEmail" type="email" placeholder="Email" autocomplete="username">
       <input class="sy-field" id="syPass" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter') syncLogin()">
@@ -3226,7 +3226,12 @@ self.onmessage = function(e){
     document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
     window.addEventListener('online', () => syncNow());
     setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_POLL_MS);
-    if (sbUser) await syncNow(); else setSyncUi('Belum masuk. Klik ☁️ untuk login.', false);
+    if (sbUser) await syncNow(); else {
+      setSyncUi('Belum masuk. Klik ☁️ untuk login.', false);
+      // perangkat baru (belum ada data lokal) & belum login: langsung tampilkan form login
+      let _n = 0; try { _n = useIDB ? await db.tx.count() : rows.length; } catch(e){}
+      if (!_n) { openSyncPanel(); setTimeout(() => { const em = document.getElementById('syEmail'); if (em) em.focus(); }, 80); }
+    }
   }
   // =================== AKHIR SINKRONISASI CLOUD ===================
 
