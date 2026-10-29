@@ -492,7 +492,6 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
             <div class="tab-dd" id="ddCekPajak">
               <div class="tab-dd-toggle active" role="button" tabindex="0" onclick="toggleTabDd(event,this)"><span>Cek Pajak</span><span class="chev">▼</span></div>
               <div class="tab-dd-menu">
-                <button type="button" onclick="cpOpenSet(event)">🧾 Pengaturan</button>
                 <button type="button" id="tabCekPajak" data-cp="bayar" class="active" onclick="cpSub='bayar';show('s9',this)">💰 PPN yg Dibayar</button>
                 <button type="button" data-cp="inv" onclick="cpSub='inv';show('s9',this)">📥 PPN Masukan</button>
                 <button type="button" data-cp="pph" onclick="cpSub='pph';show('s9',this)">🏢 PPh Badan</button>
@@ -531,6 +530,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
             <span id="cpPeriodeLbl" style="display:none;font-weight:800;font-size:15px;color:var(--strong);margin-right:6px">Pajak Periode</span>
             <label for="filterMonth">Bulan</label>
             <select id="filterMonth" onchange="applyFilters()"><option value="">Semua bulan</option></select>
+            <div id="cpSetWrap" style="display:none;position:relative;margin-left:6px"><button type="button" id="cpSetBtn" class="action-toggle" onclick="cpToggleMenu(event)" title="Pengaturan perhitungan pajak">🧾 Pengaturan <span class="chev">▼</span></button><div id="cpSetHost"></div></div>
             <button type="button" id="cpSaveBtn" class="action-toggle" style="display:none;margin-left:6px" onclick="saveCekPajakExcel()">Save Excel</button>
           </div>
           <div class="quick-search-wrap"><input type="search" id="quickSearch" placeholder="🔍 Cari produk / customer / no faktur..." title="Cari berdasarkan nama produk, customer, kode customer, atau nomor faktur" oninput="onQuickSearchInput()"></div>
@@ -1949,20 +1949,18 @@ self.onmessage = function(e){
           '</tbody></table></div>' +
         '<div class="mrk-note">Ini estimasi kasar sebagai pembanding. PPh badan sebenarnya dihitung setahun di SPT Tahunan dari laba fiskal (setelah koreksi fiskal), dengan angsuran bulanan PPh Pasal 25. PPh final 0,5% untuk CV hanya berlaku bila masih dalam masa transisi PP 20/2026 dan omzet setahun ≤ Rp4,8 miliar; tanyakan statusnya ke konsultan Anda.</div>' +
       '</details>';
-    panel.innerHTML =
-      '<div style="padding:10px 4px 4px">' +
-        '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px">' +
-          '<div style="position:relative;display:inline-block">' +
-            '<div id="cpMenu" onclick="event.stopPropagation()" style="display:' + (cpMenuOpen ? 'block' : 'none') + ';position:relative;z-index:100;background:var(--menu-bg);box-shadow:var(--menu-shadow);border-radius:10px;padding:14px;width:270px;max-width:calc(100vw - 24px);box-sizing:border-box">' +
+    const cpHost = document.getElementById('cpSetHost');
+    if (cpHost) cpHost.innerHTML =
+            '<div id="cpMenu" onclick="event.stopPropagation()" style="display:' + (cpMenuOpen ? 'block' : 'none') + ';position:absolute;left:0;top:calc(100% + 6px);z-index:130;background:var(--menu-bg);box-shadow:var(--menu-shadow);border-radius:10px;padding:14px;width:270px;max-width:calc(100vw - 24px);box-sizing:border-box">' +
               '<div class="filter-group"><label>Tarif PPN (%)</label><input type="number" min="0" max="100" step="0.1" value="' + tp + '" onchange="cpOnChange(\'tarif\', this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)"></div>' +
               '<div class="filter-group"><label>Harga jual sudah incl. PPN?</label>' + sel('jualIncl', ['Ya','Tidak']) + '</div>' +
               '<div class="filter-group"><label>HPP sudah incl. PPN?</label>' + sel('hppIncl', ['Ya','Tidak']) + '</div>' +
               '<div class="filter-group"><label>Tarif PPh badan (%)</label><input type="number" min="0" max="100" step="0.1" value="' + N(cpSet.pphTarif) + '" onchange="cpOnChange(\'pphTarif\', this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)"></div>' +
               '<div class="filter-group"><label>Omzet setahun (Rp) — kosong = otomatis</label><input type="text" inputmode="numeric" placeholder="otomatis" value="' + (N(cpSet.omzetTahun) > 0 ? Math.round(N(cpSet.omzetTahun)).toLocaleString('id-ID') : '') + '" onchange="cpOnChange(\'omzetTahun\', this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)"></div>' +
               '<div class="filter-info">Pengaturan tersimpan otomatis di browser ini.</div>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
+            '</div>';
+    panel.innerHTML =
+      '<div style="padding:10px 4px 4px">' +
         (cpSub === 'bayar' ? '<div class="tablebox" style="max-height:none"><table class="mrk" style="min-width:0">' +
           '<thead><tr><th style="text-align:left;width:44%">Komponen</th><th style="width:16%">Rupiah</th><th style="text-align:left">Rumus</th></tr></thead><tbody>' +
           row('Total penjualan (kolom Total)' + cpEx('= nilai jual semua faktur'), 'Jumlah kolom TOTAL', rpl(tj)) +
@@ -2205,6 +2203,7 @@ self.onmessage = function(e){
     closeColPicker();
     ['.quick-search-wrap', '#actionDd', '.mq-pay'].forEach(q => { const e = document.querySelector(q); if (e) e.style.display = (t === 's9') ? 'none' : ''; });
     { const pl = document.getElementById('cpPeriodeLbl'); if (pl) pl.style.display = (t === 's9') ? '' : 'none'; }
+    { const sw = document.getElementById('cpSetWrap'); if (sw) sw.style.display = (t === 's9') ? 'inline-block' : 'none'; }
     { const sb = document.getElementById('cpSaveBtn'); if (sb) sb.style.display = (t === 's9') ? 'inline-flex' : 'none'; }
     document.querySelectorAll('#table .view').forEach(v => v.style.display = 'none');
     const panel = document.getElementById('panel_' + t);
