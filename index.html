@@ -1227,10 +1227,10 @@ self.onmessage = function(e){
     if (!(await buildCached(materialisedRows, _stale))) return;
     viewCache = {};
     updateSummary(); updateFilterUi(); updateKpiFilterVisuals();
-    const activeBtn = document.querySelector('.tabs button.active') || document.querySelector('.tabs button');
+    let activeBtn = document.querySelector('.tabs button.active') || document.querySelector('.tabs button');
     let tabId = 's6';
     if (activeBtn) { const oc = activeBtn.getAttribute('onclick') || ''; const m = oc.match(/show\('([^']+)'/); if (m) tabId = m[1]; }
-    if (fakturShowAll) tabId = 's6';
+    if (fakturShowAll) { tabId = 's6'; const _fb = Array.from(document.querySelectorAll('.tabs button')).find(b => b.textContent.trim() === 'Faktur'); if (_fb) activeBtn = _fb; }
     show(tabId, activeBtn);
     const parts = [filters.month ? monthLabel(filters.month) : '', formatFilterDateLabel(filters.dateFrom, filters.dateTo), filters.sales || '', filters.product === 'FITRI' ? 'Fitri' : filters.product === 'RUPA_RUPA' ? 'Rupa Rupa' : '', filters.payment || '', filters.kdCustomer ? ('Kd: ' + filters.kdCustomer) : '', filters.q ? ('Cari: ' + filters.q) : ''].filter(Boolean);
     const bigWarn = filteredRows.length > LARGE_RESULT_WARN ? ' ⚠ Data besar — pertimbangkan mempersempit filter (bulan/sales/tanggal) agar tabel Transaksi lebih ringan.' : '';
@@ -2198,6 +2198,7 @@ self.onmessage = function(e){
   let _activeTab = 's9';
   function show(t, b){
     _activeTab = t;
+    if (t !== 's6') fakturShowAll = false; // pindah ke tab lain = keluar dari mode 'tampilkan semua produk di Faktur'
     document.querySelectorAll('.tabs button').forEach(x => x.classList.remove('active'));
     if (b) b.classList.add('active');
     const _at = document.querySelector('#actionDd .action-toggle'); if (_at) _at.classList.toggle('tab-active', t === 's0' || t === 's7' || t === 's10');
