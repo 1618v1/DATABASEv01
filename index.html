@@ -1706,6 +1706,7 @@ self.onmessage = function(e){
   }
 
   // ===== PPN MASUKAN dari INVOICE (upload Excel per bulan; Fitri vs Rupa2) =====
+  const cpEx = t => ' <b style="font-size:11.5px;font-weight:700;color:var(--strong)">' + t + '</b>';
   let cpSub = 'bayar';
   function cpSubTab(k){ cpSub = k; renderCekPajak(); }
   const CPI_KEY = 'cekpajak-invoices-v1';
@@ -1934,18 +1935,18 @@ self.onmessage = function(e){
           '<button type="button" class="action-toggle" onclick="saveCekPajakExcel()" style="margin-left:auto">Save Excel</button>' +
         '</div>' +
         (cpSub === 'bayar' ? '<div class="tablebox" style="max-height:none"><table class="mrk" style="min-width:0">' +
-          '<thead><tr><th style="text-align:left">Komponen</th><th>Rupiah</th><th style="text-align:left">Rumus</th></tr></thead><tbody>' +
-          row('Total penjualan (kolom Total)', 'Jumlah kolom TOTAL', rpl(tj)) +
-          row('Total HPP (Qty × Harga Beli)', 'Jumlah kolom HPP', rpl(th)) +
-          row('DPP penjualan', cpSet.jualIncl === 'Ya' ? 'Total penjualan ÷ (1 + ' + tp + '%)' : 'Total penjualan (belum incl. PPN)', rpl(c.dppJ)) +
-          row('PPN keluaran (dipungut dari customer)', 'DPP penjualan × ' + tp + '%', rpl(c.ppnK)) +
-          row('DPP pembelian', cpSet.hppIncl === 'Ya' ? 'HPP ÷ (1 + ' + tp + '%)' : 'HPP (belum incl. PPN)', rpl(c.dppB)) +
-          row('PPN masukan estimasi dari HPP', 'DPP pembelian × ' + tp + '%', rpl(c.ppnMEst)) +
-          '<tr><td>PPN masukan sesuai faktur pajak <span style="color:var(--muted)">(isi manual)</span></td><td class="num">' +
+          '<thead><tr><th style="text-align:left;width:44%">Komponen</th><th style="width:16%">Rupiah</th><th style="text-align:left">Rumus</th></tr></thead><tbody>' +
+          row('Total penjualan (kolom Total)' + cpEx('= nilai jual semua faktur'), 'Jumlah kolom TOTAL', rpl(tj)) +
+          row('Total HPP (Qty × Harga Beli)' + cpEx('= modal barang yang terjual'), 'Jumlah kolom HPP', rpl(th)) +
+          row('DPP penjualan' + cpEx('(Dasar Pengenaan Pajak) = harga sebelum PPN'), cpSet.jualIncl === 'Ya' ? 'Total penjualan ÷ (1 + ' + tp + '%)' : 'Total penjualan (belum incl. PPN)', rpl(c.dppJ)) +
+          row('PPN keluaran (dipungut dari customer)' + cpEx('= PPN yang Anda pungut'), 'DPP penjualan × ' + tp + '%', rpl(c.ppnK)) +
+          row('DPP pembelian' + cpEx('= harga beli sebelum PPN'), cpSet.hppIncl === 'Ya' ? 'HPP ÷ (1 + ' + tp + '%)' : 'HPP (belum incl. PPN)', rpl(c.dppB)) +
+          row('PPN masukan estimasi dari HPP' + cpEx('= PPN dibayar ke supplier (perkiraan)'), 'DPP pembelian × ' + tp + '%', rpl(c.ppnMEst)) +
+          '<tr><td>PPN masukan sesuai faktur pajak <span style="color:var(--muted)">(isi manual)</span>' + cpEx('= PPN tertera di faktur pajak') + '</td><td class="num">' +
             (filters.month ? '<input type="text" inputmode="numeric" placeholder="Rp 0" value="' + (mval != null ? Math.round(mval).toLocaleString('id-ID') : '') + '" onchange="cpSetManual(this.value)"' + (cpInvSum(filters.month) != null ? ' readonly title="Otomatis dari invoice yang diupload"' : '') + ' style="width:150px;text-align:right;box-sizing:border-box;padding:4px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)">' : '<span style="color:var(--muted)">—</span>') +
             '</td><td style="color:var(--muted)">' + (filters.month ? 'Isi total PPN masukan dari faktur pajak bulan ini; kosongkan jika belum ada' : 'Pilih satu bulan di filter Bulan untuk mengisi') + '</td></tr>' +
-          row('PPN masukan yang dipakai', c.usedManual ? 'Angka faktur pajak (diisi manual)' : 'Estimasi HPP (belum ada angka faktur pajak)', rpl(c.ppnM), true) +
-          row('PPN KURANG / (LEBIH) BAYAR', 'PPN keluaran − PPN masukan yang dipakai', rpn(c.diff), true) +
+          row('PPN masukan yang dipakai' + cpEx('= angka masukan yang dihitung'), c.usedManual ? 'Angka faktur pajak (diisi manual)' : 'Estimasi HPP (belum ada angka faktur pajak)', rpl(c.ppnM), true) +
+          row('PPN KURANG / (LEBIH) BAYAR' + cpEx('+ setor ke negara, − lebih bayar'), 'PPN keluaran − PPN masukan yang dipakai', rpn(c.diff), true) +
           '</tbody></table></div>' +
         '<div style="margin:10px 2px;font-size:13px;font-weight:800;color:' + statusClr + '">' + statusTxt + '</div>' : '') +
         (cpSub === 'inv' ? cpInvHtml(rpl) : '') +
