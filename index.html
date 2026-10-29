@@ -618,6 +618,8 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
   const N  = x => Number(x) || 0;
   function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   const U  = x => String(x ?? '').trim().toUpperCase();
+  // Seragamkan salah ketik: FITRI BOTOL 200 / 400 / 800 -> FITRI BOTOL 200ML / 400ML / 800ML
+  const normProduk = s => { const t = String(s ?? '').trim().toUpperCase(); const m = /^(FITRI BOTOL)\s+(\d+)\s*(ML)?$/.exec(t); return m ? (m[1] + ' ' + m[2] + 'ML') : t; };
   const rp = x => 'Rp ' + Math.round(N(x)).toLocaleString('id-ID');
   // Format angka tanpa "Rp"; nilai 0 diredupkan (untuk sel tabel Faktur)
   function numCell(v){
@@ -729,6 +731,7 @@ self.onmessage = function(e){
     const col = (r, ...keys) => { for (const k of keys) { if (r[k] !== undefined && r[k] !== '') return r[k]; } return ''; };
     const num = (v) => parseFloat(String(v == null ? '' : v).replace(/[^0-9.-]/g, '')) || 0;
     const up  = (v) => String(v ?? '').trim().toUpperCase();
+    const normProduk = (s) => { const m = /^(FITRI BOTOL)\\s+(\\d+)\\s*(ML)?$/.exec(s); return m ? (m[1] + ' ' + m[2] + 'ML') : s; };
     const CHUNK = 4000;
     self.postMessage({type:'start', total: raw.length});
     const products = new Set(), sales = new Set(), months = new Set();
@@ -737,7 +740,7 @@ self.onmessage = function(e){
       const chunk = raw.slice(i, end).map(x => {
         if (!x) return null;
         const faktur = String(col(x,'No. Faktur','No.Faktur','No Faktur','Faktur') || '').trim();
-        const produk = up(col(x,'Produk','PRODUK'));
+        const produk = normProduk(up(col(x,'Produk','PRODUK')));
         const sales_ = up(col(x,'Sales','SALES'));
         const jumlah = num(col(x,'Jumlah','Qty','QTY'));
         if (faktur === 'No. Faktur' || faktur === 'No.Faktur') return null;
@@ -921,7 +924,7 @@ self.onmessage = function(e){
       const out = raw.map(x => {
         if (!x) return null;
         const faktur = String(col(x,'No. Faktur','No.Faktur','No Faktur','Faktur') || '').trim();
-        const produk = up(col(x,'Produk','PRODUK'));
+        const produk = normProduk(up(col(x,'Produk','PRODUK')));
         const sales_ = up(col(x,'Sales','SALES'));
         const jumlah = num(col(x,'Jumlah','Qty','QTY'));
         if (faktur === 'No. Faktur' || faktur === 'No.Faktur') return null;
@@ -2852,7 +2855,7 @@ self.onmessage = function(e){
     if(!confirm('Restore akan mengganti data lokal aplikasi dengan isi backup ini. Lanjutkan?')) return false;
     if(!useIDB || !db) throw new Error('Penyimpanan lokal belum siap.');
     const _prevSync = await getSyncState(), _prevKeys = Object.keys(_prevSync.months || {});
-    await db.tx.clear(); if(backup.tx.length) await db.tx.bulkPut(backup.tx);
+    await db.tx.clear(); if(backup.tx.length) await db.tx.bulkPut(backup.tx.map(r => (r && r.produk) ? Object.assign({}, r, {produk: normProduk(r.produk)}) : r));
     await db.meta.clear(); if(Array.isArray(backup.meta) && backup.meta.length) await db.meta.bulkPut(backup.meta.filter(m => m.key !== 'syncState' && m.key !== 'syncDirty'));
     try { if (_prevSync.init) { await setMetaVal('syncState', _prevSync); await syncMarkAll(_prevKeys); } } catch(e){ console.warn('sync after restore', e); }
     await restoreFromDB(); await refreshAfterDataChange();
@@ -3034,7 +3037,7 @@ self.onmessage = function(e){
       setSyncUi('Mengunduh ' + (x.bulan === '_none' ? 'data tanpa bulan' : x.bulan) + '…', false, 'busy');
       const { data: rec, error: e2 } = await sb.from('rekap_months').select('rows,ver').eq('bulan', x.bulan).single();
       if (e2) throw e2;
-      const rowsIn = (Array.isArray(rec.rows) ? rec.rows : []).map(r => { const o = Object.assign({}, r); delete o.id; return o; });
+      const rowsIn = (Array.isArray(rec.rows) ? rec.rows : []).map(r => { const o = Object.assign({}, r); delete o.id; if (o.produk) o.produk = normProduk(o.produk); return o; });
       await db.transaction('rw', db.tx, async () => { await db.tx.where('bulan').equals(fromMk(x.bulan)).delete(); if (rowsIn.length) await db.tx.bulkAdd(rowsIn); });
       st.months[x.bulan] = rec.ver; changed = true;
     }
@@ -3121,6 +3124,7 @@ self.onmessage = function(e){
   (async function init(){
     initTheme();
     await initDB();
+    try { if (useIDB && db) await db.tx.filter(r => r.produk && normProduk(r.produk) !== r.produk).modify(r => { r.produk = normProduk(r.produk); }); } catch(e){ console.warn('normalisasi nama produk gagal', e); }
     await restoreFromDB();
     try { await refreshAutoBatalBadgeOnly(); } catch(e){}
     try { await syncInit(); } catch(e){ console.warn('syncInit gagal', e); }
