@@ -531,6 +531,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
             <span id="cpPeriodeLbl" style="display:none;font-weight:800;font-size:15px;color:var(--strong);margin-right:6px">Pajak Periode</span>
             <label for="filterMonth">Bulan</label>
             <select id="filterMonth" onchange="applyFilters()"><option value="">Semua bulan</option></select>
+            <button type="button" id="cpSaveBtn" class="action-toggle" style="display:none;margin-left:6px" onclick="saveCekPajakExcel()">Save Excel</button>
           </div>
           <div class="quick-search-wrap"><input type="search" id="quickSearch" placeholder="🔍 Cari produk / customer / no faktur..." title="Cari berdasarkan nama produk, customer, kode customer, atau nomor faktur" oninput="onQuickSearchInput()"></div>
           <div class="col-picker" id="colPicker" style="display:none">
@@ -1961,7 +1962,6 @@ self.onmessage = function(e){
               '<div class="filter-info">Pengaturan tersimpan otomatis di browser ini.</div>' +
             '</div>' +
           '</div>' +
-          '<button type="button" class="action-toggle" onclick="saveCekPajakExcel()" style="margin-left:auto">Save Excel</button>' +
         '</div>' +
         (cpSub === 'bayar' ? '<div class="tablebox" style="max-height:none"><table class="mrk" style="min-width:0">' +
           '<thead><tr><th style="text-align:left;width:44%">Komponen</th><th style="width:16%">Rupiah</th><th style="text-align:left">Rumus</th></tr></thead><tbody>' +
@@ -2205,6 +2205,7 @@ self.onmessage = function(e){
     closeColPicker();
     ['.quick-search-wrap', '#actionDd', '.mq-pay'].forEach(q => { const e = document.querySelector(q); if (e) e.style.display = (t === 's9') ? 'none' : ''; });
     { const pl = document.getElementById('cpPeriodeLbl'); if (pl) pl.style.display = (t === 's9') ? '' : 'none'; }
+    { const sb = document.getElementById('cpSaveBtn'); if (sb) sb.style.display = (t === 's9') ? 'inline-flex' : 'none'; }
     document.querySelectorAll('#table .view').forEach(v => v.style.display = 'none');
     const panel = document.getElementById('panel_' + t);
     if (panel) panel.style.display = 'block';
