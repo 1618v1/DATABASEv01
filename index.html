@@ -76,6 +76,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 /* ===== TABEL ===== */
 .tablebox{overflow:auto;max-height:68vh;position:relative}
+.dh-top{display:flex;justify-content:flex-end;margin:0 0 8px}.dh-month{font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px}.dh-month select{padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card,#fff);color:var(--text)}
+.dh-table{min-width:0;width:100%;table-layout:fixed}.dh-table th{text-align:center;font-weight:700}.dh-table td{padding:6px 8px;border:1px solid var(--border)}.dh-table thead tr:nth-child(2) th{top:33px}.dh-note{font-size:11px;color:#64748b;margin-top:6px}
 #panel_s6 .tablebox{max-height:calc(74vh - 4px)} /* Faktur: tambah ±1 baris agar ruang kosong di bawah terpakai */
 .vrow td{height:34px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis}
 .vspace td{padding:0!important;border:0!important}
@@ -475,6 +477,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
             <button onclick="show('s9',this)">Cek Pajak</button>
             <button id="tabTransaksi" style="display:none" onclick="show('s0',this)">Transaksi</button>
             <button id="tabSambalRefill" style="display:none" onclick="show('s7',this)">Sambal Refill</button>
+            <button id="tabDaftarHarga" style="display:none" onclick="show('s10',this)">Daftar Harga</button>
           </div>
           
           <div class="month-quick mq-pay">
@@ -515,6 +518,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
           <div class="action-menu" onclick="event.stopPropagation()">
             <button type="button" id="menuTransaksi" onclick="closeActionMenu();document.getElementById('tabTransaksi').click()" title="Tampilkan laporan Transaksi detail">📋 Transaksi</button>
             <button type="button" id="menuSambalRefill" onclick="closeActionMenu();document.getElementById('tabSambalRefill').click()" title="Tampilkan laporan Sambal Refill 600ml">🧴 Sambal Refill</button>
+            <button type="button" id="menuDaftarHarga" onclick="closeActionMenu();document.getElementById('tabDaftarHarga').click()" title="Tampilkan daftar harga beli & harga jual per produk">💲 Daftar Harga</button>
             <button type="button" id="autoBatalToolbarBtn" onclick="openAutoBatalDetectModal()" title="Cari otomatis faktur bernilai nol dan pasangan qty +/- yang kemungkinan transaksi batal">🔁 Cek Batal Otomatis<span id="autoBatalBadge"></span></button>
             <button type="button" id="toolbarSaveExcel" onclick="saveExcelTab(_activeTab||'s0')">💾 Simpan Excel</button>
           </div>
@@ -526,6 +530,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
         <div id="panel_s7" class="view" style="display:none"></div>
         <div id="panel_s8" class="view" style="display:none"></div>
         <div id="panel_s9" class="view" style="display:none"></div>
+        <div id="panel_s10" class="view" style="display:none"></div>
       </div>
     </div>
   </div>
@@ -1604,6 +1609,10 @@ self.onmessage = function(e){
   }
   function excelSpec(tab){
     const r = R;
+    if (tab === 's10'){
+      const rows = dhBuildRows().map(x => [x.produk, x.hbMin, x.hbMax, x.hjMin, x.hjMax]);
+      return { name:'Daftar_Harga', title:'Daftar Harga Produk (terendah – tertinggi)', head:['PRODUK','HARGA BELI TERENDAH','HARGA BELI TERTINGGI','HARGA JUAL TERENDAH','HARGA JUAL TERTINGGI'], head2:[['PRODUK',null],['HARGA BELI','TERENDAH'],['HARGA BELI','TERTINGGI'],['HARGA JUAL','TERENDAH'],['HARGA JUAL','TERTINGGI']], types:['t','rp','rp','rp','rp'], rows };
+    }
     if (tab === 's0'){
       const rows = filteredRows.map((_,i) => { const x = getUiRow(i); const hpp = N(x.Jumlah) * N(x['Harga Beli']); return [i+1, x.Tanggal, x['No. Faktur'], x.Produk, N(x.Jumlah), x.Satuan||'', N(x['Harga Jual']), N(x['Harga Beli']), N(x.Discount), N(x.Total), hpp, N(x.Total) - hpp, x.Sales, x.Pembayaran, x.Customer||'', x['Kd Customer']||'', x.Alamat||'']; });
       return { name:'Transaksi', title:'Laporan Transaksi Penjualan', head:['NO','TANGGAL','NO. FAKTUR','PRODUK','QTY','SATUAN','HARGA JUAL','HARGA BELI','DISC','TOTAL','HPP','PROFIT','SALES','PEMBAYARAN','CUSTOMER','KODE CUSTOMER','ALAMAT'], types:['c','d','t','t','n','c','rp','rp','rp','rp','rp','rp','t','t','t','t','w'], rows, total:['TOTAL','','','',r.qty,'','','','',r.sales,r.hpp,r.profit,'','','','',''] };
@@ -2050,7 +2059,7 @@ self.onmessage = function(e){
     _activeTab = t;
     document.querySelectorAll('.tabs button').forEach(x => x.classList.remove('active'));
     if (b) b.classList.add('active');
-    const _at = document.querySelector('#actionDd .action-toggle'); if (_at) _at.classList.toggle('tab-active', t === 's0' || t === 's7');
+    const _at = document.querySelector('#actionDd .action-toggle'); if (_at) _at.classList.toggle('tab-active', t === 's0' || t === 's7' || t === 's10');
     
     document.getElementById('colPicker').style.display = (t === 's0') ? 'block' : 'none';
     closeColPicker();
@@ -2236,9 +2245,42 @@ self.onmessage = function(e){
     panel.innerHTML = monthlyHtml;
   }
 
+  // ===== TAB DAFTAR HARGA: harga beli & harga jual per produk (mengikuti filter; faktur/baris batal tidak dihitung) =====
+  function dhSetMonth(v){ const m = document.getElementById('filterMonth'); if (!m) return; m.value = v; applyFilters(); }
+  function dhBuildRows(){
+    // Apa adanya: harga beli & harga jual terendah dan tertinggi per produk pada filter aktif (baris/faktur batal sudah tidak ikut).
+    const map = new Map();
+    filteredRows.forEach(r => {
+      const x = (r.Produk !== undefined || r['No. Faktur'] !== undefined) ? r : materialiseOne(r);
+      const prod = String(x.Produk || '').trim(); if (!prod) return;
+      const hb = N(x['Harga Beli']), hj = N(x['Harga Jual']);
+      const k = prod.toUpperCase();
+      let g = map.get(k);
+      if (!g) { g = { produk: prod, hbMin: hb, hbMax: hb, hjMin: hj, hjMax: hj, n: 0 }; map.set(k, g); }
+      if (hb < g.hbMin) g.hbMin = hb; if (hb > g.hbMax) g.hbMax = hb;
+      if (hj < g.hjMin) g.hjMin = hj; if (hj > g.hjMax) g.hjMax = hj;
+      g.n++;
+    });
+    return [...map.values()].sort((a, b) => a.produk.localeCompare(b.produk, 'id'));
+  }
+  function dhSetMonth(v){ const m = document.getElementById('filterMonth'); if (!m) return; m.value = v; applyFilters(); }
+  function renderDaftarHarga(){
+    const list = dhBuildRows();
+    const fm = document.getElementById('filterMonth');
+    const opts = (fm ? fm.innerHTML : '<option value="">Semua bulan</option>').replace(/ selected(="[^"]*")?/g, '')
+      .replace('<option value="' + (filters.month || '') + '"', '<option value="' + (filters.month || '') + '" selected');
+    const monthSel = '<label class="dh-month">Bulan <select onchange="dhSetMonth(this.value)">' + opts + '</select></label>';
+    const body = list.length
+      ? list.map(r => '<tr><td>' + escHtml(r.produk) + '</td><td class="num">' + rp(r.hbMin) + '</td><td class="num">' + rp(r.hbMax) + '</td><td class="num">' + rp(r.hjMin) + '</td><td class="num">' + rp(r.hjMax) + '</td></tr>').join('')
+      : '<tr><td colspan="5" style="text-align:center;padding:24px;color:#64748b">Belum ada data produk pada filter saat ini.</td></tr>';
+    return '<div class="dh-top">' + monthSel + '</div>' +
+      '<div class="tablebox"><table class="dh-table"><thead><tr><th rowspan="2">PRODUK</th><th colspan="2">HARGA BELI</th><th colspan="2">HARGA JUAL</th></tr><tr><th>TERENDAH</th><th>TERTINGGI</th><th>TERENDAH</th><th>TERTINGGI</th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+      '<div class="dh-note">' + list.length + ' produk · apa adanya dari data pada filter aktif. Hanya faktur / baris yang dibatalkan yang tidak ikut. Nilai Rp 0 (bonus) dan retur tetap tampil supaya bisa dicek.</div>';
+  }
   function renderTab(t){
     if (t === 's6') return renderRekapPerFaktur();
     if (t === 's7') return renderSambalRefill();
+    if (t === 's10') return renderDaftarHarga();
     return '';
   }
 
