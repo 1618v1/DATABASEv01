@@ -256,6 +256,10 @@ body.dark .gmodal-box h3,body.dark .nama-fix-box h3{color:#93c5fd}
 
 /* ===== NAMA FIX ===== */
 .nama-fix-box{padding:20px 22px 18px;width:100%;max-width:900px;max-height:88vh;display:flex;flex-direction:column}
+.batal-arch-head{margin-top:10px;font-size:12px;line-height:1.45}.batal-arch-head span{display:block;color:#64748b;font-size:11px}
+.batal-arch-list{max-height:22vh;overflow:auto;border:1px dashed var(--border);border-radius:8px;padding:4px 8px;margin-top:6px}
+.batal-arch-row{display:block;font-size:11.5px;padding:2px 0}
+.batal-arch-tag{display:inline-block;padding:0 6px;border-radius:4px;font-size:10.5px;font-weight:700;border:1px solid #cbd5e1;background:#f1f5f9;color:#475569}
 .nama-fix-list{overflow:auto;border:1px solid var(--border);border-radius:10px;flex:1;min-height:0}
 .nama-fix-row{display:grid;grid-template-columns:1.1fr 1.5fr;gap:12px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px}
 .nama-fix-row:last-child{border-bottom:0}
@@ -511,7 +515,7 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
           <div class="action-menu" onclick="event.stopPropagation()">
             <button type="button" id="menuTransaksi" onclick="closeActionMenu();document.getElementById('tabTransaksi').click()" title="Tampilkan laporan Transaksi detail">📋 Transaksi</button>
             <button type="button" id="menuSambalRefill" onclick="closeActionMenu();document.getElementById('tabSambalRefill').click()" title="Tampilkan laporan Sambal Refill 600ml">🧴 Sambal Refill</button>
-            <button type="button" id="autoBatalToolbarBtn" onclick="openAutoBatalDetectModal()" title="Cari otomatis pasangan qty +/- (produk & faktur sama) yang kemungkinan transaksi batal">🔁 Cek Batal Otomatis<span id="autoBatalBadge"></span></button>
+            <button type="button" id="autoBatalToolbarBtn" onclick="openAutoBatalDetectModal()" title="Cari otomatis faktur bernilai nol dan pasangan qty +/- yang kemungkinan transaksi batal">🔁 Cek Batal Otomatis<span id="autoBatalBadge"></span></button>
             <button type="button" id="toolbarSaveExcel" onclick="saveExcelTab(_activeTab||'s0')">💾 Simpan Excel</button>
           </div>
         </div>
@@ -566,13 +570,14 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
 <div class="gmodal-overlay" id="autoBatalOverlay" onclick="if(event.target===this) closeAutoBatalModal()">
   <div class="nama-fix-box" style="max-width:820px">
     <h3>🔁 Deteksi Otomatis Transaksi Batal</h3>
-    <div class="nama-fix-sub">Sistem menemukan baris qty yang saling meniadakan (mis. <b>+1</b> dan <b>−1</b>) pada <b>faktur &amp; produk yang sama</b> — pola umum transaksi batal. Centang pasangan yang memang batal, lalu simpan. Data asli tidak dihapus/diubah, hanya dikecualikan dari perhitungan.</div>
+    <div class="nama-fix-sub">Sistem mencari dua pola transaksi batal: <b>faktur nol</b> (total faktur Rp 0 dan ada baris qty minus, dibatalkan seluruh faktur) dan <b>pasangan qty +/−</b> pada faktur &amp; produk yang sama (kedua barisnya dibatalkan). Centang yang memang batal, lalu simpan. Data asli tidak dihapus/diubah, hanya dikecualikan dari semua perhitungan, dan pembatalan tetap tersimpan walau file di-upload ulang.</div>
     <div class="auto-batal-topbar">
       <button type="button" class="nama-fix-ghost" onclick="autoBatalSelectAll(true)">☑ Centang Semua</button>
       <button type="button" class="nama-fix-ghost" onclick="autoBatalSelectAll(false)">☐ Hapus Semua Centang</button>
       <span class="auto-batal-count" id="autoBatalCount"></span>
     </div>
     <div class="nama-fix-list" id="autoBatalList" style="flex:1"></div>
+    <div id="autoBatalArchive"></div>
     <div class="nama-fix-actions">
       <div class="left"></div>
       <div style="display:flex;gap:8px">
@@ -2460,34 +2465,92 @@ self.onmessage = function(e){
     return rows || [];
   }
   function computeAutoBatalCandidates(allRows){
-    const groups = new Map();
+    // Dua jenis temuan:
+    //  NOL  = faktur yang total nilainya nol dan berisi baris qty minus -> kandidat batal SELURUH faktur
+    //  PAIR = pasangan qty +/- pada faktur & produk yang sama -> kandidat batal baris (kedua sisi)
+    const byFaktur = new Map();
     (allRows||[]).forEach(r => {
       const nf = String(r.faktur ?? r['No. Faktur'] ?? '').trim();
       if (!nf || isBatalFaktur(nf)) return;
-      const prod = String(r.produk ?? r.Produk ?? '').trim(); if (!prod) return;
-      const gk = nf + '\u0001' + prod.toUpperCase();
-      if (!groups.has(gk)) groups.set(gk, { faktur: nf, produk: prod, rows: [] });
-      groups.get(gk).rows.push(r);
+      if (!byFaktur.has(nf)) byFaktur.set(nf, []);
+      byFaktur.get(nf).push(r);
     });
+    const qOf = r => N(r.jumlah ?? r.Jumlah), tOf = r => N(r.total ?? r.Total);
     const candidates = [];
-    groups.forEach(g => {
-      const items = g.rows;
-      const pos = items.filter(r => N(r.jumlah ?? r.Jumlah) > 0).slice();
-      const neg = items.filter(r => N(r.jumlah ?? r.Jumlah) < 0).slice();
-      if (!pos.length || !neg.length) return;
-      const usedPos = new Set();
-      neg.forEach(n => {
-        const absQ = Math.abs(N(n.jumlah ?? n.Jumlah));
-        const idx = pos.findIndex((p, i) => !usedPos.has(i) && N(p.jumlah ?? p.Jumlah) === absQ);
-        if (idx < 0) return;
-        usedPos.add(idx);
-        const p = pos[idx], lkP = lineKeyOf(p), lkN = lineKeyOf(n);
-        if (batalLineSet.has(lkP) && batalLineSet.has(lkN)) return;
-        candidates.push({ faktur: g.faktur, produk: g.produk, tgl: p.tanggal ?? p.Tanggal ?? n.tanggal ?? n.Tanggal, qtyPos: N(p.jumlah ?? p.Jumlah), qtyNeg: N(n.jumlah ?? n.Jumlah), totalPos: N(p.total ?? p.Total), totalNeg: N(n.total ?? n.Total), lineKeys: [lkP, lkN] });
+    byFaktur.forEach((rowsF, nf) => {
+      const live = rowsF.filter(r => !batalLineSet.has(lineKeyOf(r)));
+      if (!live.length) return;
+      // 1) Faktur NOL (harus ada baris minus, supaya faktur bonus/gratis bernilai 0 tidak ikut terdeteksi)
+      if (live.some(r => qOf(r) < 0)) {
+        const sum = live.reduce((s, r) => s + tOf(r), 0);
+        if (Math.abs(sum) < 1) {
+          const pos = live.filter(r => qOf(r) > 0);
+          const nilai = pos.reduce((s, r) => s + Math.abs(tOf(r)), 0);
+          const first = (pos[0] || live[0]);
+          candidates.push({ kind: 'NOL', faktur: nf, tgl: first.tanggal ?? first.Tanggal, n: live.length, nilai, lineKeys: [] });
+          return;
+        }
+      }
+      // 2) Pasangan qty +/- per produk
+      const byProd = new Map();
+      live.forEach(r => {
+        const prod = String(r.produk ?? r.Produk ?? '').trim(); if (!prod) return;
+        const pk = prod.toUpperCase();
+        if (!byProd.has(pk)) byProd.set(pk, { produk: prod, rows: [] });
+        byProd.get(pk).rows.push(r);
+      });
+      byProd.forEach(g => {
+        const pos = g.rows.filter(r => qOf(r) > 0), neg = g.rows.filter(r => qOf(r) < 0);
+        if (!pos.length || !neg.length) return;
+        const usedPos = new Set();
+        neg.forEach(n => {
+          const absQ = Math.abs(qOf(n));
+          // utamakan pasangan yang qty DAN nilainya sama; kalau tidak ada, qty sama saja (ditandai nilai beda)
+          let idx = pos.findIndex((p, i) => !usedPos.has(i) && qOf(p) === absQ && Math.abs(tOf(p) + tOf(n)) < 1);
+          if (idx < 0) idx = pos.findIndex((p, i) => !usedPos.has(i) && qOf(p) === absQ);
+          if (idx < 0) return;
+          usedPos.add(idx);
+          const p = pos[idx];
+          candidates.push({ kind: 'PAIR', faktur: nf, produk: g.produk, tgl: p.tanggal ?? p.Tanggal ?? n.tanggal ?? n.Tanggal, qtyPos: qOf(p), qtyNeg: qOf(n), totalPos: tOf(p), totalNeg: tOf(n), nilaiSama: Math.abs(tOf(p) + tOf(n)) < 1, lineKeys: [lineKeyOf(p), lineKeyOf(n)] });
+        });
       });
     });
     candidates.sort((a,b) => String(a.faktur).localeCompare(String(b.faktur)));
     return candidates;
+  }
+  // Arsip: pembatalan tersimpan yang barisnya tidak ada lagi di data sekarang (file diganti/dikoreksi, bulan dihapus).
+  // Tetap berlaku bila datanya kembali, dan bisa dikembalikan dari sini.
+  let _batalArchive = [];
+  function computeBatalArchive(allRows){
+    const presentF = new Set(), presentL = new Set();
+    (allRows||[]).forEach(r => { presentF.add(String(r.faktur ?? r['No. Faktur'] ?? '').trim()); presentL.add(lineKeyOf(r)); });
+    const out = [];
+    batalFakturSet.forEach(nf => { if (!presentF.has(nf)) out.push({ type: 'F', key: nf, faktur: nf }); });
+    batalLineSet.forEach(k => {
+      const p = String(k).split('|'), nf = p[0];
+      if (batalFakturSet.has(nf) || presentL.has(k)) return;
+      out.push({ type: 'L', key: k, faktur: nf, produk: p[1] || '', qty: p[2] || '', total: p[3] || '' });
+    });
+    out.sort((a,b) => String(a.faktur).localeCompare(String(b.faktur)));
+    return out;
+  }
+  function renderBatalArchive(){
+    const el = document.getElementById('autoBatalArchive'); if (!el) return;
+    if (!_batalArchive.length){ el.innerHTML = ''; return; }
+    el.innerHTML = '<div class="batal-arch-head"><b>🗃 Arsip pembatalan (' + _batalArchive.length + ')</b><span>Pembatalan tersimpan yang barisnya tidak ada di data saat ini (file diganti / dikoreksi / bulan dihapus). Tetap berlaku kalau datanya muncul lagi. Centang lalu klik Aktifkan Kembali bila ingin dilepas.</span></div>' +
+      '<div class="batal-arch-list">' + _batalArchive.map((a, i) =>
+        '<label class="batal-arch-row"><input type="checkbox" class="batal-arch-cb" data-i="' + i + '"> <b>' + escHtml(a.faktur) + '</b> ' +
+        (a.type === 'F' ? '<span class="batal-arch-tag">seluruh faktur</span>' : escHtml(a.produk) + ' · qty ' + escHtml(a.qty) + ' · ' + rp(a.total)) + '</label>').join('') + '</div>' +
+      '<div style="text-align:right;margin-top:6px"><button type="button" class="nama-fix-ghost" onclick="restoreBatalArchive()">↺ Aktifkan Kembali yang Dicentang</button></div>';
+  }
+  async function restoreBatalArchive(){
+    const boxes = [...document.querySelectorAll('#autoBatalArchive .batal-arch-cb:checked')];
+    if (!boxes.length) return alert('Centang pembatalan yang ingin diaktifkan kembali.');
+    if (!confirm('Aktifkan kembali ' + boxes.length + ' pembatalan?\n\nData terkait akan dihitung lagi bila ada.')) return;
+    boxes.forEach(cb => { const a = _batalArchive[+cb.getAttribute('data-i')]; if (!a) return; if (a.type === 'F') batalFakturSet.delete(a.key); else batalLineSet.delete(a.key); });
+    await saveBatalFaktur();
+    showBusy('Memperbarui…'); await refreshAfterDataChange(); await runAutoBatalDetection({ silent: true }); hideBusy();
+    setStatus(boxes.length + ' pembatalan diaktifkan kembali.');
   }
   let _autoBatalVersion = -1;
   async function refreshAutoBatalBadgeOnly(){
@@ -2505,7 +2568,8 @@ self.onmessage = function(e){
     opts = opts || {};
     const all = await getAllTxRowsForAutoBatal();
     _autoBatalCandidates = computeAutoBatalCandidates(all);
-    updateAutoBatalBadge(); renderAutoBatalModal();
+    _batalArchive = computeBatalArchive(all);
+    updateAutoBatalBadge(); renderAutoBatalModal(); renderBatalArchive();
     const overlay = document.getElementById('autoBatalOverlay'); if (!overlay) return;
     if (_autoBatalCandidates.length || !opts.silent) overlay.classList.add('show');
   }
@@ -2515,30 +2579,41 @@ self.onmessage = function(e){
     const wrap = document.getElementById('autoBatalList'), cnt = document.getElementById('autoBatalCount');
     if (!wrap) return;
     if (!_autoBatalCandidates.length){
-      wrap.innerHTML = '<div style="padding:24px;text-align:center;color:#64748b;font-size:12px">✅ Tidak ada pasangan qty +/- yang terdeteksi saat ini.</div>';
+      wrap.innerHTML = '<div style="padding:24px;text-align:center;color:#64748b;font-size:12px">✅ Tidak ada faktur nol atau pasangan qty +/- yang terdeteksi saat ini.</div>';
       if (cnt) cnt.textContent = '';
       return;
     }
-    if (cnt) cnt.textContent = _autoBatalCandidates.length + ' pasangan ditemukan';
-    wrap.innerHTML = '<div class="nama-fix-row nama-fix-head" style="grid-template-columns:28px 1.1fr 1.3fr 100px 130px"><div></div><div>No. Faktur</div><div>Produk</div><div>Qty (+/−)</div><div>Total (+/−)</div></div>' +
+    const nNol = _autoBatalCandidates.filter(c => c.kind === 'NOL').length, nPair = _autoBatalCandidates.length - nNol;
+    if (cnt) cnt.textContent = (nNol ? nNol + ' faktur nol' : '') + (nNol && nPair ? ' · ' : '') + (nPair ? nPair + ' pasangan' : '') + ' ditemukan';
+    const G = 'grid-template-columns:28px 1.1fr 1.3fr 100px 130px';
+    wrap.innerHTML = '<div class="nama-fix-row nama-fix-head" style="' + G + '"><div></div><div>No. Faktur</div><div>Produk / Jenis</div><div>Qty (+/−)</div><div>Total (+/−)</div></div>' +
       _autoBatalCandidates.map((c) => {
+        if (c.kind === 'NOL') {
+          return '<div class="nama-fix-row auto-batal-row" style="' + G + '"><div><input type="checkbox" class="auto-batal-cb" data-faktur="' + escHtml(c.faktur) + '" checked></div><div>' + escHtml(c.faktur) + '<br><span style="font-size:10.5px;color:#64748b">' + fmtTgl(c.tgl) + '</span></div><div><span class="batal-arch-tag" style="background:#fef3c7;color:#92400e;border-color:#fcd34d">FAKTUR NOL</span><br><span style="font-size:10.5px;color:#64748b">batalkan seluruh faktur · ' + c.n + ' baris</span></div><div class="num">—</div><div class="num">' + rp(c.nilai) + ' / −' + rp(c.nilai) + '<br><span style="font-size:10.5px;color:#64748b">net Rp 0</span></div></div>';
+        }
         const keysAttr = c.lineKeys.map(k => String(k).replace(/"/g,'&quot;')).join('||');
-        return '<div class="nama-fix-row auto-batal-row" style="grid-template-columns:28px 1.1fr 1.3fr 100px 130px"><div><input type="checkbox" class="auto-batal-cb" data-keys="' + keysAttr + '" checked></div><div>' + escHtml(c.faktur) + '<br><span style="font-size:10.5px;color:#64748b">' + fmtTgl(c.tgl) + '</span></div><div>' + escHtml(c.produk) + '</div><div class="num">' + c.qtyPos + ' / ' + c.qtyNeg + '</div><div class="num">' + rp(c.totalPos) + ' / ' + rp(c.totalNeg) + '</div></div>';
+        const warn = c.nilaiSama ? '' : '<br><span style="font-size:10.5px;color:#b45309">⚠ nilai tidak sama, periksa dulu</span>';
+        return '<div class="nama-fix-row auto-batal-row" style="' + G + '"><div><input type="checkbox" class="auto-batal-cb" data-keys="' + keysAttr + '"' + (c.nilaiSama ? ' checked' : '') + '></div><div>' + escHtml(c.faktur) + '<br><span style="font-size:10.5px;color:#64748b">' + fmtTgl(c.tgl) + '</span></div><div>' + escHtml(c.produk) + '</div><div class="num">' + c.qtyPos + ' / ' + c.qtyNeg + '</div><div class="num">' + rp(c.totalPos) + ' / ' + rp(c.totalNeg) + warn + '</div></div>';
       }).join('');
   }
   function autoBatalSelectAll(on){ document.querySelectorAll('#autoBatalList .auto-batal-cb').forEach(cb => { cb.checked = !!on; }); }
   async function confirmAutoBatalSelected(){
     const boxes = document.querySelectorAll('#autoBatalList .auto-batal-cb:checked');
-    if (!boxes.length) return alert('Centang minimal satu pasangan transaksi yang ingin ditandai BATAL.');
-    let n = 0;
+    if (!boxes.length) return alert('Centang minimal satu faktur / pasangan transaksi yang ingin ditandai BATAL.');
+    let n = 0, nf = 0;
     boxes.forEach(cb => {
+      const fk = cb.getAttribute('data-faktur');
+      if (fk) {
+        if (!batalFakturSet.has(fk)) { batalFakturSet.add(fk); nf++; const prefix = fk + '|'; [...batalLineSet].forEach(k => { if (k.startsWith(prefix)) batalLineSet.delete(k); }); }
+        return;
+      }
       const keys = (cb.getAttribute('data-keys')||'').split('||').filter(Boolean);
       keys.forEach(k => { if (!batalLineSet.has(k)) { batalLineSet.add(k); n++; } });
     });
-    if (!n) { closeAutoBatalModal(); return; }
+    if (!n && !nf) { closeAutoBatalModal(); return; }
     await saveBatalFaktur(); closeAutoBatalModal();
     showBusy('Memperbarui…'); await refreshAfterDataChange(); await refreshAutoBatalBadgeOnly(); hideBusy();
-    setStatus(n + ' baris ditandai BATAL otomatis (pasangan qty +/-).');
+    setStatus((nf ? nf + ' faktur nol dibatalkan' : '') + (nf && n ? ' · ' : '') + (n ? n + ' baris pasangan +/- dibatalkan' : '') + ' — tidak dihitung di mana pun.');
   }
 
   document.addEventListener('keydown', function(e){
