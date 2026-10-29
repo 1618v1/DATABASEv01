@@ -1662,7 +1662,7 @@ self.onmessage = function(e){
 
   // ===== TAB CEK PAJAK (PPN keluaran vs masukan) =====
   const CP_KEY = 'cekpajak-settings-v1';
-  let cpSet = { tarif: 11, jualIncl: 'Ya', hppIncl: 'Ya', sambal: 'Tidak' };
+  let cpSet = { tarif: 11, jualIncl: 'Ya', hppIncl: 'Ya', sambal: 'Tidak', pphTarif: 22, omzetTahun: '' };
   try { const s = JSON.parse(localStorage.getItem(CP_KEY) || 'null'); if (s) cpSet = Object.assign(cpSet, s); } catch(e){}
   const CPM_KEY = 'cekpajak-manual-v1';
   let cpManual = {};
@@ -1676,6 +1676,37 @@ self.onmessage = function(e){
     try { localStorage.setItem(CPM_KEY, JSON.stringify(cpManual)); } catch(e){}
     renderCekPajak();
   }
+  const CPO_KEY = 'cekpajak-opex-v1';
+  let cpOpex = {};
+  try { cpOpex = JSON.parse(localStorage.getItem(CPO_KEY) || '{}') || {}; } catch(e){ cpOpex = {}; }
+  function cpOpexVal(mk){ const v = cpOpex[mk]; return (v == null || v === '' || !isFinite(v)) ? null : Number(v); }
+  function cpSetOpex(raw){
+    const mk = filters.month; if (!mk) return;
+    let t = String(raw == null ? '' : raw).trim();
+    if (!t) delete cpOpex[mk];
+    else { t = t.replace(/[^0-9,]/g, '').replace(',', '.'); const n = parseFloat(t); if (isFinite(n) && n >= 0) cpOpex[mk] = n; else delete cpOpex[mk]; }
+    try { localStorage.setItem(CPO_KEY, JSON.stringify(cpOpex)); } catch(e){}
+    renderCekPajak();
+  }
+  const PPH_BATAS = 4800000000, PPH_MAX = 50000000000, PPH_FINAL = 0.005;
+  // PPh badan (CV): tarif umum dengan fasilitas Pasal 31E (diskon 50% untuk bagian omzet s.d. Rp4,8 miliar, omzet <= Rp50 miliar) + pembanding final 0,5%
+  function cpPph(dppJ, dppB, opex, omzetThn){
+    const tarif = N(cpSet.pphTarif) / 100;
+    const labaKotor = dppJ - dppB, laba = labaKotor - opex;
+    const share = omzetThn <= PPH_BATAS ? 1 : (omzetThn > PPH_MAX ? 0 : PPH_BATAS / omzetThn);
+    const tarifEf = tarif * (1 - 0.5 * share);
+    return { labaKotor, laba, share, tarifEf, pphUmum: Math.max(laba, 0) * tarifEf, pphFinal: dppJ * PPH_FINAL, omzetThn };
+  }
+  // konteks PPh untuk cakupan data yang sedang tampil
+  function cpPphCtx(data, c){
+    const ms = new Set(); data.forEach(x => { const k = monthKey(x.Tanggal); if (k) ms.add(k); });
+    const nM = Math.max(1, ms.size);
+    let opex = 0;
+    if (filters.month) opex = cpOpexVal(filters.month) || 0; else ms.forEach(k => { opex += (cpOpexVal(k) || 0); });
+    const auto = c.dppJ / nM * 12, manualThn = N(cpSet.omzetTahun) > 0 ? N(cpSet.omzetTahun) : null;
+    const omzetThn = manualThn != null ? manualThn : auto;
+    return { nM, opex, auto, manualThn, omzetThn, r: cpPph(c.dppJ, c.dppB, opex, omzetThn) };
+  }
   function cpSave(){ try { localStorage.setItem(CP_KEY, JSON.stringify(cpSet)); } catch(e){} }
   let cpMenuOpen = false;
   function cpPlaceMenu(){
@@ -1687,6 +1718,8 @@ self.onmessage = function(e){
   document.addEventListener('click', function(){ if (!cpMenuOpen) return; cpMenuOpen = false; const m = document.getElementById('cpMenu'); if (m) m.style.display = 'none'; });
   function cpOnChange(k, v){
     if (k === 'tarif'){ let n = parseFloat(String(v).replace(',', '.')); if (!isFinite(n) || n < 0 || n > 100) n = 11; v = n; }
+    else if (k === 'pphTarif'){ let n = parseFloat(String(v).replace(',', '.')); if (!isFinite(n) || n < 0 || n > 100) n = 22; v = n; }
+    else if (k === 'omzetTahun'){ const t2 = String(v).replace(/[^0-9,]/g, '').replace(',', '.'); const n = parseFloat(t2); v = (isFinite(n) && n > 0) ? n : ''; }
     cpSet[k] = v; cpSave(); renderCekPajak();
   }
   // Sumber data = baris yang sedang tampil (ikut filter Bulan/Pembayaran/Sales, tanpa transaksi batal)
@@ -1729,6 +1762,29 @@ self.onmessage = function(e){
     const row = (a, f, v, strong) => '<tr' + (strong ? ' style="font-weight:800"' : '') + '><td>' + a + '</td><td class="num">' + v + '</td><td style="color:var(--muted)">' + f + '</td></tr>';
     const tp = N(cpSet.tarif);
     const facTxt = (1 + tp / 100).toLocaleString('id-ID', { maximumFractionDigits: 4 });
+    const pc = cpPphCtx(data, c), pr = pc.r;
+    const pct = v => (v * 100).toLocaleString('id-ID', { maximumFractionDigits: 2 }) + '%';
+    const inpStyle = 'width:150px;text-align:right;box-sizing:border-box;padding:4px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)';
+    const opexCell = filters.month ? '<input type="text" inputmode="numeric" placeholder="Rp 0" value="' + (cpOpexVal(filters.month) != null ? Math.round(cpOpexVal(filters.month)).toLocaleString('id-ID') : '') + '" onchange="cpSetOpex(this.value)" style="' + inpStyle + '">' : rpl(pc.opex);
+    const finalOk = pc.omzetThn <= PPH_BATAS;
+    const pphHtml =
+      '<details open style="margin:6px 2px 8px;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--card)">' +
+        '<summary style="cursor:pointer;font-weight:800;color:var(--strong);font-size:13px">🏢 PPh Badan (CV) — pembanding hitungan konsultan</summary>' +
+        '<div class="tablebox" style="max-height:none;margin-top:8px"><table class="mrk" style="min-width:0">' +
+          '<thead><tr><th style="text-align:left">Komponen</th><th>Rupiah</th><th style="text-align:left">Rumus</th></tr></thead><tbody>' +
+          row('Peredaran bruto periode (tanpa PPN)', 'DPP penjualan', rpl(c.dppJ)) +
+          row('HPP tanpa PPN', 'DPP pembelian', rpl(c.dppB)) +
+          row('Laba kotor', 'Peredaran bruto − HPP tanpa PPN', rpl(pr.labaKotor)) +
+          '<tr><td>Biaya operasional <span style="color:var(--muted)">(isi manual)</span></td><td class="num">' + opexCell + '</td><td style="color:var(--muted)">' + (filters.month ? 'Gaji, sewa, transport, listrik, dll bulan ini; kosongkan jika belum ada' : 'Jumlah isian per bulan (isi per bulan setelah memilih satu bulan)') + '</td></tr>' +
+          row('Laba sebelum pajak (estimasi)', 'Laba kotor − biaya operasional', rpn(pr.laba), true) +
+          row('Peredaran bruto setahun (asumsi)', N(cpSet.omzetTahun) > 0 ? 'Diisi manual di Pengaturan' : 'Periode ÷ ' + pc.nM + ' bulan × 12 (otomatis)', rpl(pc.omzetThn)) +
+          row('Porsi laba yang dapat fasilitas Pasal 31E', pc.omzetThn <= PPH_BATAS ? 'Omzet ≤ Rp4,8 miliar: seluruhnya' : (pc.omzetThn > PPH_MAX ? 'Omzet > Rp50 miliar: tidak ada fasilitas' : 'Rp4,8 miliar ÷ omzet setahun'), pct(pr.share)) +
+          row('Tarif efektif PPh badan', cpSet.pphTarif + '% × (1 − 50% × porsi fasilitas)', pct(pr.tarifEf)) +
+          row('PPh badan estimasi (tarif umum)', 'Laba sebelum pajak × tarif efektif', rpl(pr.pphUmum), true) +
+          row('Pembanding: PPh final 0,5% dari omzet', 'Peredaran bruto × 0,5%' + (finalOk ? '' : ' (TIDAK berlaku: omzet setahun > Rp4,8 miliar)'), rpl(pr.pphFinal)) +
+          '</tbody></table></div>' +
+        '<div class="mrk-note">Ini estimasi kasar sebagai pembanding. PPh badan sebenarnya dihitung setahun di SPT Tahunan dari laba fiskal (setelah koreksi fiskal), dengan angsuran bulanan PPh Pasal 25. PPh final 0,5% untuk CV hanya berlaku bila masih dalam masa transisi PP 20/2026 dan omzet setahun ≤ Rp4,8 miliar; tanyakan statusnya ke konsultan Anda.</div>' +
+      '</details>';
     panel.innerHTML =
       '<div style="padding:10px 4px 4px">' +
         '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px">' +
@@ -1740,6 +1796,8 @@ self.onmessage = function(e){
               '<div class="filter-group"><label>Harga jual sudah incl. PPN?</label>' + sel('jualIncl', ['Ya','Tidak']) + '</div>' +
               '<div class="filter-group"><label>HPP sudah incl. PPN?</label>' + sel('hppIncl', ['Ya','Tidak']) + '</div>' +
               '<div class="filter-group"><label>Sertakan Sambal Refill 600ml?</label>' + sel('sambal', ['Tidak','Ya']) + '</div>' +
+              '<div class="filter-group"><label>Tarif PPh badan (%)</label><input type="number" min="0" max="100" step="0.1" value="' + N(cpSet.pphTarif) + '" onchange="cpOnChange(\'pphTarif\', this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)"></div>' +
+              '<div class="filter-group"><label>Omzet setahun (Rp) — kosong = otomatis</label><input type="text" inputmode="numeric" placeholder="otomatis" value="' + (N(cpSet.omzetTahun) > 0 ? Math.round(N(cpSet.omzetTahun)).toLocaleString('id-ID') : '') + '" onchange="cpOnChange(\'omzetTahun\', this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)"></div>' +
               '<div class="filter-info">Pengaturan tersimpan otomatis di browser ini.</div>' +
             '</div>' +
           '</div>' +
@@ -1767,6 +1825,7 @@ self.onmessage = function(e){
           row('PPN KURANG / (LEBIH) BAYAR', 'PPN keluaran − PPN masukan yang dipakai', rpn(c.diff), true) +
           '</tbody></table></div>' +
         '<div style="margin:10px 2px;font-size:13px;font-weight:800;color:' + statusClr + '">' + statusTxt + '</div>' +
+        pphHtml +
         '<details open style="margin:6px 2px 4px;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--card)">' +
           '<summary style="cursor:pointer;font-weight:800;color:var(--strong);font-size:13px">📘 Panduan & Rumus</summary>' +
           '<div style="font-size:12.5px;line-height:1.65;color:var(--text);margin-top:8px">' +
@@ -1793,6 +1852,7 @@ self.onmessage = function(e){
               '<li>Untuk angka paling tepat, pilih satu bulan lalu isi kotak <b>"PPN masukan sesuai faktur pajak"</b> di tabel. Angka itu dipakai menggantikan estimasi HPP, tersimpan per bulan di browser ini, dan ikut ke Excel.</li>' +
               '<li>Tanpa isian itu, PPN masukan di sini adalah <b>estimasi dari HPP</b> (barang yang terjual). SPT sebenarnya memakai faktur pajak pembelian pada bulan tersebut, yang bisa berbeda bila stok bertambah atau berkurang.</li>' +
               '<li>Data mengikuti filter Bulan, Pembayaran, dan Sales; transaksi batal tidak ikut dihitung. Sambal Refill 600ml ikut dihitung hanya bila diaktifkan di Pengaturan.</li>' +
+              '<li><b>PPh badan (CV)</b>: laba kotor di tab ini dikurangi biaya operasional yang Anda isi. Tarif umum 22%; bila omzet setahun ≤ Rp50 miliar, bagian laba yang sebanding dengan omzet s.d. Rp4,8 miliar mendapat diskon 50% (Pasal 31E), sehingga tarif efektifnya antara 11% dan 22%. Hasilnya dibandingkan dengan PPh final 0,5% dari omzet.</li>' +
               '<li>Sejak 2025 tarif PPN 12% dengan DPP nilai lain 11/12 untuk barang non-mewah, sehingga beban efektifnya tetap 11%. Konfirmasikan ke konsultan pajak / KPP sebelum membetulkan SPT.</li>' +
             '</ul>' +
           '</div>' +
@@ -1811,7 +1871,7 @@ self.onmessage = function(e){
       const thin = { style:'thin', color:{ argb:'FFC5CFDC' } }, border = { top:thin, left:thin, bottom:thin, right:thin };
       const hdrStyle = cell => { cell.font = { name:F, size:10, bold:true, color:{ argb:'FFFFFFFF' } }; cell.fill = FILL('FF1F4E78'); cell.alignment = { horizontal:'center', vertical:'middle', wrapText:true }; cell.border = border; };
       const wb = new ExcelJS.Workbook(); wb.creator = 'Rekap Penjualan'; wb.created = new Date();
-      const wr = wb.addWorksheet('Rekap'), wd = wb.addWorksheet('Detail', { views:[{ state:'frozen', ySplit:4 }] });
+      const wr = wb.addWorksheet('Rekap'), wh = wb.addWorksheet('PPh'), wd = wb.addWorksheet('Detail', { views:[{ state:'frozen', ySplit:4 }] });
       const monthsSet = new Set(); data.forEach(x => { const k = monthKey(x.Tanggal); if (k) monthsSet.add(k); });
       const months = Array.from(monthsSet).sort();
       const wm = months.length > 1 ? wb.addWorksheet('Per Bulan') : null;
@@ -1899,6 +1959,43 @@ self.onmessage = function(e){
       ['A24','B24','C24'].forEach(a => { wr.getCell(a).font = { name:F, size:10, bold:true }; wr.getCell(a).fill = FILL('FFFCE4D6'); });
       wr.getCell('A26').value = 'Catatan: hanya benar jika Anda PKP dan pembelian punya faktur pajak sah. Konfirmasi ke konsultan pajak / DJP.'; wr.getCell('A26').font = { name:F, size:9, italic:true };
 
+
+      // ---------- PPh (pembanding) ----------
+      const pcx = cpPphCtx(data, cc), px = pcx.r;
+      wh.columns = [{ width:62 }, { width:24 }, { width:74 }];
+      wh.getCell('A1').value = 'PEMBANDING PPh BADAN (CV) — ' + (filters.month ? monthLabel(filters.month) : 'Semua bulan'); wh.getCell('A1').font = { name:F, size:14, bold:true, color:{ argb:'FF1F4E78' } };
+      wh.getCell('A2').value = 'Estimasi kasar sebagai pembanding hitungan konsultan. PPh sebenarnya dihitung setahun dari laba fiskal (SPT Tahunan) + angsuran PPh Pasal 25. Sel biru/kuning = boleh diubah.'; wh.getCell('A2').font = { name:F, size:9, italic:true, color:{ argb:'FF64748B' } };
+      const hl = (r, a, b, c, isInput, fmt) => {
+        wh.getCell('A'+r).value = a; wh.getCell('A'+r).font = { name:F, size:10 };
+        const cb = wh.getCell('B'+r); cb.value = b; cb.font = { name:F, size:10, color:{ argb: isInput ? 'FF0000FF' : 'FF000000' } }; if (isInput) cb.fill = FILL('FFFFFF99'); if (fmt) cb.numFmt = fmt; cb.alignment = { horizontal:'right' };
+        if (c) { wh.getCell('C'+r).value = c; wh.getCell('C'+r).font = { name:F, size:9, color:{ argb:'FF64748B' } }; }
+        ['A','B','C'].forEach(k => wh.getCell(k+r).border = border);
+      };
+      wh.getCell('A4').value = 'PENGATURAN'; wh.getCell('A4').font = { name:F, size:10, bold:true };
+      hl(5, 'Tarif PPh badan', N(cpSet.pphTarif) / 100, 'Tarif umum Pasal 17 UU PPh.', true, '0.0%');
+      hl(6, 'Batas omzet fasilitas Pasal 31E', PPH_BATAS, 'Bagian omzet s.d. angka ini mendapat diskon tarif.', true, NUMF);
+      hl(7, 'Batas omzet maksimum untuk fasilitas', PPH_MAX, 'Di atas angka ini tidak ada fasilitas.', true, NUMF);
+      hl(8, 'Diskon tarif fasilitas', 0.5, '50% dari tarif umum.', true, '0%');
+      hl(9, 'Tarif PPh final UMKM (pembanding)', PPH_FINAL, 'Hanya bila CV masih dalam masa transisi PP 20/2026 dan omzet setahun ≤ batas di atas.', true, '0.0%');
+      wh.getCell('A11').value = 'DATA PERIODE'; wh.getCell('A11').font = { name:F, size:10, bold:true };
+      hl(12, 'Peredaran bruto periode (DPP penjualan, tanpa PPN)', { formula:'Rekap!B14', result:cc.dppJ }, 'Dari sheet Rekap', false, NUMF);
+      hl(13, 'HPP tanpa PPN (DPP pembelian)', { formula:'Rekap!B16', result:cc.dppB }, 'Dari sheet Rekap', false, NUMF);
+      hl(14, 'Laba kotor', { formula:'B12-B13', result:px.labaKotor }, 'Peredaran bruto − HPP tanpa PPN', false, NUMF);
+      hl(15, 'Biaya operasional (isi manual)', pcx.opex, 'Gaji, sewa, transport, listrik, dll untuk periode ini.', true, NUMF);
+      hl(16, 'Laba sebelum pajak (estimasi)', { formula:'B14-B15', result:px.laba }, 'Laba kotor − biaya operasional', false, NUMF);
+      ['A16','B16','C16'].forEach(a => { wh.getCell(a).font = { name:F, size:10, bold:true }; wh.getCell(a).fill = FILL('FFF2F2F2'); });
+      hl(17, 'Peredaran bruto setahun — isi manual (kosong = otomatis)', pcx.manualThn, 'Otomatis = peredaran bruto periode ÷ ' + pcx.nM + ' bulan × 12', true, NUMF);
+      hl(18, 'Peredaran bruto setahun yang dipakai', { formula:'IF(ISNUMBER(B17),B17,B12/' + pcx.nM + '*12)', result:pcx.omzetThn }, '', false, NUMF);
+      ['A20','B20','C20'].forEach((a,i) => { wh.getCell(a).value = ['PERHITUNGAN','Hasil','Rumus'][i]; hdrStyle(wh.getCell(a)); });
+      hl(21, 'Porsi laba yang dapat fasilitas Pasal 31E', { formula:'IF(B18<=B6,1,IF(B18>B7,0,B6/B18))', result:px.share }, '1 jika omzet ≤ batas; 0 jika > Rp50 miliar; selain itu batas ÷ omzet setahun', false, '0.00%');
+      hl(22, 'Tarif efektif PPh badan', { formula:'B5*(1-B8*B21)', result:px.tarifEf }, 'Tarif × (1 − diskon × porsi fasilitas)', false, '0.00%');
+      hl(23, 'PPh badan estimasi (tarif umum)', { formula:'MAX(B16,0)*B22', result:px.pphUmum }, 'Laba sebelum pajak × tarif efektif', false, NUMF);
+      ['A23','B23','C23'].forEach(a => { wh.getCell(a).font = { name:F, size:10, bold:true }; wh.getCell(a).fill = FILL('FFFFE699'); });
+      hl(24, 'Pembanding: PPh final 0,5% dari peredaran bruto', { formula:'B12*B9', result:px.pphFinal }, 'Peredaran bruto periode × tarif final', false, NUMF);
+      hl(25, 'Selisih (PPh badan − PPh final)', { formula:'B23-B24', result:px.pphUmum - px.pphFinal }, 'Positif = PPh badan lebih besar', false, NUMF);
+      hl(26, 'Keterangan PPh final', { formula:'IF(B18>B6,"TIDAK berlaku: omzet setahun > batas","Berlaku jika masih masa transisi")', result: pcx.omzetThn > PPH_BATAS ? 'TIDAK berlaku: omzet setahun > batas' : 'Berlaku jika masih masa transisi' }, 'Tanyakan statusnya ke konsultan pajak', false);
+      wh.getCell('A28').value = 'Catatan: laba di sini adalah laba komersial sederhana (tanpa koreksi fiskal, kerugian tahun lalu, dll). Konfirmasi skema dan angka ke konsultan pajak / KPP.'; wh.getCell('A28').font = { name:F, size:9, italic:true };
+
       // ---------- Per Bulan ----------
       if (wm){
         wm.columns = [{ width:11 }, { width:18 }, { width:18 }, { width:18 }, { width:18 }, { width:18 }, { width:20 }, { width:20 }, { width:18 }];
@@ -1930,6 +2027,7 @@ self.onmessage = function(e){
       [['MAKSUD "KELEBIHAN BAYAR"',1],['',0],['PPN yang disetor ke negara = PPN keluaran − PPN masukan.',0],['• PPN keluaran = PPN yang dipungut dari customer saat menjual.',0],['• PPN masukan = PPN yang dibayar ke supplier saat membeli (sudah ada di dalam harga beli / HPP).',0],['',0],
        ['Kelebihan bayar biasanya terjadi karena:',1],['1. PPN dari seluruh penjualan disetor penuh, tetapi PPN di harga beli tidak dikurangkan (tidak dikreditkan).',0],['2. Harga jual sebenarnya sudah termasuk PPN, tetapi dihitung seolah belum, lalu PPN ditambahkan lagi (dua kali).',0],['3. PPN masukan lebih besar daripada PPN keluaran pada suatu bulan. Hasilnya LEBIH BAYAR: dapat dikompensasikan ke masa berikutnya atau direstitusi.',0],['',0],
        ['Syarat PPN masukan bisa dikreditkan:',1],['• Sudah dikukuhkan sebagai PKP.',0],['• Supplier menerbitkan faktur pajak yang sah atas nama Anda.',0],['• Faktur dikreditkan pada masa pajak yang tepat dan pembelian terkait usaha.',0],['',0],
+       ['PPh badan (CV): lihat sheet PPh. Estimasi dari laba kotor dikurangi biaya operasional yang Anda isi; tarif 22% dengan fasilitas Pasal 31E (diskon 50% untuk bagian omzet s.d. Rp4,8 miliar bila omzet setahun ≤ Rp50 miliar), dibandingkan dengan PPh final 0,5% dari omzet.',0],['',0],
        ['PPN masukan: angka default adalah estimasi dari HPP. Untuk angka tepat, isi sel kuning "PPN masukan sesuai faktur pajak" di sheet Rekap (atau kolom H di sheet Per Bulan).',0],['',0],
        ['Konfirmasikan perlakuan pajak (termasuk DPP nilai lain 11/12) ke konsultan pajak atau DJP sebelum lapor SPT Masa.',0]
       ].forEach(([tx,b],i) => { const c = wp.getCell('A'+(i+1)); c.value = tx; c.font = { name:F, size: i === 0 ? 12 : 10, bold: !!b }; });
