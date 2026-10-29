@@ -2179,6 +2179,7 @@ self.onmessage = function(e){
     
     document.getElementById('colPicker').style.display = (t === 's0') ? 'block' : 'none';
     closeColPicker();
+    ['.quick-search-wrap', '#actionDd'].forEach(q => { const e = document.querySelector(q); if (e) e.style.display = (t === 's9') ? 'none' : ''; });
     document.querySelectorAll('#table .view').forEach(v => v.style.display = 'none');
     const panel = document.getElementById('panel_' + t);
     if (panel) panel.style.display = 'block';
