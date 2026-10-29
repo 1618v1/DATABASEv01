@@ -472,9 +472,9 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
       <div class="toolbar-row">
         <div class="toolbar-left">
           <div class="tabs" id="tabsMenu">
-            <button class="active" onclick="show('s6',this)">Faktur</button>
+            <button onclick="show('s6',this)">Faktur</button>
             <button onclick="show('s8',this)">Rekap Bulanan</button>
-            <button id="tabCekPajak" onclick="show('s9',this)">Cek Pajak</button>
+            <button id="tabCekPajak" class="active" onclick="show('s9',this)">Cek Pajak</button>
             <button id="tabTransaksi" style="display:none" onclick="show('s0',this)">Transaksi</button>
             <button id="tabSambalRefill" style="display:none" onclick="show('s7',this)">Sambal Refill</button>
             <button id="tabDaftarHarga" style="display:none" onclick="show('s10',this)">Daftar Harga</button>
@@ -1007,7 +1007,7 @@ self.onmessage = function(e){
     document.getElementById('result').style.display   = 'block';
     document.getElementById('save').disabled          = totalRows === 0;
     if (typeof buildColPicker === 'function') buildColPicker();
-    show('s6', document.querySelector('.tabs button.active') || document.querySelector('.tabs button'));
+    show(_activeTab || 's6', document.querySelector('.tabs button.active') || document.querySelector('.tabs button'));
     const dl = (replacedDays && replacedDays.length) ? replacedDays.slice().sort() : [];
     const blLabel = dl.length ? (dl.length === 1 ? dayLabel(dl[0]) : dayLabel(dl[0]) + ' s/d ' + dayLabel(dl[dl.length-1]) + ' (' + dl.length + ' hari)') : '';
     const extra = blLabel ? ' — digabung (tanggal diperbarui: ' + blLabel + '; baris baru: ' + (newCount||0).toLocaleString('id-ID') + ')' : '';
@@ -2164,7 +2164,7 @@ self.onmessage = function(e){
     finally { hideBusy(); }
   }
 
-  let _activeTab = 's6';
+  let _activeTab = 's9';
   function show(t, b){
     _activeTab = t;
     document.querySelectorAll('.tabs button').forEach(x => x.classList.remove('active'));
@@ -3011,7 +3011,7 @@ self.onmessage = function(e){
       document.getElementById('save').disabled          = false;
       buildColPicker();
       await applyFilters();
-      show('s6', document.querySelector('.tabs button.active') || document.querySelector('.tabs button'));
+      show(_activeTab || 's6', document.querySelector('.tabs button.active') || document.querySelector('.tabs button'));
       setStatus('Data dari IndexedDB dimuat: ' + total.toLocaleString('id-ID') + ' baris (persistensi aktif).');
     } catch(e){ console.warn('restoreFromDB gagal', e); }
   }
