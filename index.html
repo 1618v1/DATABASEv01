@@ -76,7 +76,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 /* ===== TABEL ===== */
 .tablebox{overflow:auto;max-height:68vh;position:relative}
-.dh-top{display:flex;justify-content:flex-end;margin:0 0 8px}.dh-month{font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px}.dh-month select{padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card,#fff);color:var(--text)}
+.dh-top{display:flex;justify-content:flex-end;gap:14px;flex-wrap:wrap;margin:0 0 8px}.dh-month{font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px}.dh-month select{padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card,#fff);color:var(--text)}
 .dh-table{min-width:0;width:100%;table-layout:fixed}.dh-table th{text-align:center;font-weight:700}.dh-table td{padding:6px 8px;border:1px solid var(--border)}.dh-table thead tr:nth-child(2) th{top:33px}.dh-note{font-size:11px;color:#64748b;margin-top:6px}
 #panel_s6 .tablebox{max-height:calc(74vh - 4px)} /* Faktur: tambah ±1 baris agar ruang kosong di bawah terpakai */
 .vrow td{height:34px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis}
@@ -2246,7 +2246,6 @@ self.onmessage = function(e){
   }
 
   // ===== TAB DAFTAR HARGA: harga beli & harga jual per produk (mengikuti filter; faktur/baris batal tidak dihitung) =====
-  function dhSetMonth(v){ const m = document.getElementById('filterMonth'); if (!m) return; m.value = v; applyFilters(); }
   function dhBuildRows(){
     // Apa adanya: harga beli & harga jual terendah dan tertinggi per produk pada filter aktif (baris/faktur batal sudah tidak ikut).
     const map = new Map();
@@ -2263,6 +2262,7 @@ self.onmessage = function(e){
     });
     return [...map.values()].sort((a, b) => a.produk.localeCompare(b.produk, 'id'));
   }
+  function dhSetKategori(v){ filters.product = v || ''; fakturShowAll = false; applyFilters(); }
   function dhSetMonth(v){ const m = document.getElementById('filterMonth'); if (!m) return; m.value = v; applyFilters(); }
   function renderDaftarHarga(){
     const list = dhBuildRows();
@@ -2273,7 +2273,9 @@ self.onmessage = function(e){
     const body = list.length
       ? list.map(r => '<tr><td>' + escHtml(r.produk) + '</td><td class="num">' + rp(r.hbMin) + '</td><td class="num">' + rp(r.hbMax) + '</td><td class="num">' + rp(r.hjMin) + '</td><td class="num">' + rp(r.hjMax) + '</td></tr>').join('')
       : '<tr><td colspan="5" style="text-align:center;padding:24px;color:#64748b">Belum ada data produk pada filter saat ini.</td></tr>';
-    return '<div class="dh-top">' + monthSel + '</div>' +
+    const kat = '<label class="dh-month">Kategori <select onchange="dhSetKategori(this.value)">' +
+      [['', 'Semua kategori'], ['FITRI', 'Fitri'], ['RUPA_RUPA', 'Rupa Rupa (selain Fitri)']].map(o => '<option value="' + o[0] + '"' + ((filters.product || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label>';
+    return '<div class="dh-top">' + kat + monthSel + '</div>' +
       '<div class="tablebox"><table class="dh-table"><thead><tr><th rowspan="2">PRODUK</th><th colspan="2">HARGA BELI</th><th colspan="2">HARGA JUAL</th></tr><tr><th>TERENDAH</th><th>TERTINGGI</th><th>TERENDAH</th><th>TERTINGGI</th></tr></thead><tbody>' + body + '</tbody></table></div>' +
       '<div class="dh-note">' + list.length + ' produk · apa adanya dari data pada filter aktif. Hanya faktur / baris yang dibatalkan yang tidak ikut. Nilai Rp 0 (bonus) dan retur tetap tampil supaya bisa dicek.</div>';
   }
