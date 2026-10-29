@@ -130,6 +130,7 @@ body.dark .kpi.kpi-inline.active-filter{background:linear-gradient(145deg,#1e293
 #page-penjualan .toolbar-row .month-quick .btn-pay,
 #page-penjualan .toolbar-row .month-quick .filter-btn,
 #page-penjualan .toolbar-row .tabs button,
+#page-penjualan .toolbar-row .tabs .tab-dd-toggle,
 #page-penjualan .toolbar-row .action-toggle{box-sizing:border-box;height:var(--ctl-h);padding-top:0;padding-bottom:0;display:inline-flex;align-items:center;justify-content:center}
 #page-penjualan .toolbar-row .quick-search-wrap input,
 #page-penjualan .toolbar-row .month-quick select{display:block;justify-content:normal}
@@ -141,7 +142,16 @@ body.dark .kpi.kpi-inline.active-filter{background:linear-gradient(145deg,#1e293
 .tabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center}
 #page-penjualan .tabs{gap:5px;margin-bottom:6px;margin-right:4px}
 .tabs button{padding:7px 14px;font-size:12px;font-weight:700;border-radius:6px;background:var(--chip-bg);color:var(--chip-text);border:1px solid var(--input-border);transition:all .15s;line-height:1.1}
-.tabs button:hover{background:var(--hover-bg)}
+.tabs button:hover,.tabs .tab-dd-toggle:hover{background:var(--hover-bg)}
+/* ===== TAB DROPDOWN (Penjualan / Cek Pajak) ===== */
+.tab-dd{position:relative;display:inline-flex}
+.tabs .tab-dd-toggle{padding:7px 14px;font-size:12px;font-weight:700;border-radius:6px;background:var(--chip-bg);color:var(--chip-text);border:1px solid var(--input-border);transition:all .15s;line-height:1.1;cursor:pointer;user-select:none;white-space:nowrap;gap:6px}
+.tabs .tab-dd-toggle.active{background:var(--chip-active-bg);color:var(--chip-active-text);border-color:var(--chip-active-bg);box-shadow:0 2px 6px rgba(31,78,120,.25)}
+.tab-dd-toggle .chev{font-size:10px;transition:transform .2s;display:inline-block}
+.tab-dd.open .tab-dd-toggle .chev{transform:rotate(180deg)}
+.tab-dd-menu{display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:120;min-width:190px;flex-direction:column;gap:5px;padding:8px;border-radius:10px;background:var(--menu-bg);box-shadow:var(--menu-shadow)}
+.tab-dd.open .tab-dd-menu{display:flex}
+.tabs .tab-dd-menu button{width:100%;justify-content:flex-start !important;text-align:left}
 .tabs button.active{background:var(--chip-active-bg);color:var(--chip-active-text);border-color:var(--chip-active-bg);box-shadow:0 2px 6px rgba(31,78,120,.25)}
 
 .col-picker{position:relative;margin-left:0}
@@ -472,9 +482,23 @@ body.dark .pager-btn:hover:not(:disabled){background:#475569;color:#fff}
       <div class="toolbar-row">
         <div class="toolbar-left">
           <div class="tabs" id="tabsMenu">
-            <button onclick="show('s6',this)">Faktur</button>
-            <button onclick="show('s8',this)">Rekap Bulanan</button>
-            <button id="tabCekPajak" class="active" onclick="show('s9',this)">Cek Pajak</button>
+            <div class="tab-dd" id="ddPenjualan">
+              <div class="tab-dd-toggle" role="button" tabindex="0" onclick="toggleTabDd(event,this)"><span>Penjualan</span><span class="chev">▼</span></div>
+              <div class="tab-dd-menu">
+                <button onclick="show('s6',this)">Faktur</button>
+                <button onclick="show('s8',this)">Rekap Bulanan</button>
+              </div>
+            </div>
+            <div class="tab-dd" id="ddCekPajak">
+              <div class="tab-dd-toggle active" role="button" tabindex="0" onclick="toggleTabDd(event,this)"><span>Cek Pajak</span><span class="chev">▼</span></div>
+              <div class="tab-dd-menu">
+                <button type="button" onclick="cpOpenSet(event)">🧾 Pengaturan</button>
+                <button type="button" id="tabCekPajak" data-cp="bayar" class="active" onclick="cpSub='bayar';show('s9',this)">💰 PPN yg Dibayar</button>
+                <button type="button" data-cp="inv" onclick="cpSub='inv';show('s9',this)">📥 PPN Masukan</button>
+                <button type="button" data-cp="pph" onclick="cpSub='pph';show('s9',this)">🏢 PPh Badan</button>
+                <button type="button" data-cp="pan" onclick="cpSub='pan';show('s9',this)">📘 Panduan</button>
+              </div>
+            </div>
             <button id="tabTransaksi" style="display:none" onclick="show('s0',this)">Transaksi</button>
             <button id="tabSambalRefill" style="display:none" onclick="show('s7',this)">Sambal Refill</button>
             <button id="tabDaftarHarga" style="display:none" onclick="show('s10',this)">Daftar Harga</button>
@@ -1709,6 +1733,13 @@ self.onmessage = function(e){
   const cpEx = t => ' <b style="font-size:11.5px;font-weight:700;color:var(--strong)">' + t + '</b>';
   let cpSub = 'bayar';
   function cpSubTab(k){ cpSub = k; renderCekPajak(); }
+  function cpOpenSet(e){
+    if (e) e.stopPropagation();
+    closeTabDd();
+    cpMenuOpen = true;
+    const it = document.querySelector('#ddCekPajak [data-cp="' + cpSub + '"]');
+    if (_activeTab !== 's9') show('s9', it); else renderCekPajak();
+  }
   const CPI_KEY = 'cekpajak-invoices-v1';
   let cpInv = {};
   try { cpInv = JSON.parse(localStorage.getItem(CPI_KEY) || '{}') || {}; } catch(e){ cpInv = {}; }
@@ -1921,8 +1952,7 @@ self.onmessage = function(e){
       '<div style="padding:10px 4px 4px">' +
         '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px">' +
           '<div style="position:relative;display:inline-block">' +
-            '<button type="button" class="action-toggle" onclick="cpToggleMenu(event)" title="Pengaturan perhitungan pajak">🧾 Pengaturan <span class="chev">▼</span></button>' +
-            '<div id="cpMenu" onclick="event.stopPropagation()" style="display:' + (cpMenuOpen ? 'block' : 'none') + ';position:absolute;left:0;top:calc(100% + 6px);z-index:100;background:var(--menu-bg);box-shadow:var(--menu-shadow);border-radius:10px;padding:14px;width:270px;max-width:calc(100vw - 24px);box-sizing:border-box">' +
+            '<div id="cpMenu" onclick="event.stopPropagation()" style="display:' + (cpMenuOpen ? 'block' : 'none') + ';position:relative;z-index:100;background:var(--menu-bg);box-shadow:var(--menu-shadow);border-radius:10px;padding:14px;width:270px;max-width:calc(100vw - 24px);box-sizing:border-box">' +
               '<div class="filter-group"><label>Tarif PPN (%)</label><input type="number" min="0" max="100" step="0.1" value="' + tp + '" onchange="cpOnChange(\'tarif\', this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--input-border);border-radius:6px;font-size:12px;background:var(--input-bg);color:var(--input-text)"></div>' +
               '<div class="filter-group"><label>Harga jual sudah incl. PPN?</label>' + sel('jualIncl', ['Ya','Tidak']) + '</div>' +
               '<div class="filter-group"><label>HPP sudah incl. PPN?</label>' + sel('hppIncl', ['Ya','Tidak']) + '</div>' +
@@ -1931,7 +1961,6 @@ self.onmessage = function(e){
               '<div class="filter-info">Pengaturan tersimpan otomatis di browser ini.</div>' +
             '</div>' +
           '</div>' +
-          [['bayar', '💰 PPN yg Dibayar'], ['inv', '📥 PPN Masukan'], ['pph', '🏢 PPh Badan'], ['pan', '📘 Panduan']].map(b => '<button type="button" class="action-toggle" onclick="cpSubTab(\'' + b[0] + '\')" style="' + (cpSub === b[0] ? 'font-weight:800;box-shadow:inset 0 -2px 0 var(--strong)' : '') + '">' + b[1] + '</button>').join('') +
           '<button type="button" class="action-toggle" onclick="saveCekPajakExcel()" style="margin-left:auto">Save Excel</button>' +
         '</div>' +
         (cpSub === 'bayar' ? '<div class="tablebox" style="max-height:none"><table class="mrk" style="min-width:0">' +
@@ -3251,6 +3280,22 @@ self.onmessage = function(e){
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); _deferredInstallPrompt = e; const btn = document.getElementById('installBtn'); if (btn) btn.style.display = 'inline-block'; });
   document.getElementById('installBtn')?.addEventListener('click', async () => { if (!_deferredInstallPrompt) return; _deferredInstallPrompt.prompt(); await _deferredInstallPrompt.userChoice; _deferredInstallPrompt = null; document.getElementById('installBtn').style.display = 'none'; });
   window.addEventListener('appinstalled', () => { const btn = document.getElementById('installBtn'); if (btn) btn.style.display = 'none'; });
+</script>
+<script>
+(function(){
+  window.closeTabDd = function(except){ document.querySelectorAll('.tab-dd.open').forEach(function(d){ if (d !== except) d.classList.remove('open'); }); };
+  window.toggleTabDd = function(e, el){ if (e) e.stopPropagation(); const dd = el.closest('.tab-dd'); const was = dd.classList.contains('open'); closeTabDd(); if (!was) dd.classList.add('open'); };
+  document.addEventListener('click', function(){ closeTabDd(); });
+  function sync(){
+    document.querySelectorAll('.tab-dd').forEach(function(dd){
+      const t = dd.querySelector('.tab-dd-toggle'); if (!t) return;
+      const has = !!dd.querySelector('.tab-dd-menu button.active');
+      if (has !== t.classList.contains('active')) t.classList.toggle('active', has);
+    });
+  }
+  const menu = document.getElementById('tabsMenu');
+  if (menu){ new MutationObserver(sync).observe(menu, { attributes:true, attributeFilter:['class'], subtree:true }); sync(); }
+})();
 </script>
 </body>
 </html>
