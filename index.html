@@ -3069,6 +3069,9 @@ self.onmessage = function(e){
   const SB_URL = 'https://hkrzoxlxzdmqyenorexe.supabase.co';
   const SB_KEY = 'sb_publishable_HXvWJmEjxBAMJDSY206R2g_S9yg8Xlr';
   const SYNC_POLL_MS = 60000;
+  // Opsional: isi agar perangkat baru masuk & mengunduh data otomatis tanpa form login.
+  // PERHATIAN: isi file ini terbaca siapa pun yang membuka halaman. Pakai hanya jika aplikasi tidak dipublikasikan umum.
+  const SB_AUTO_EMAIL = '', SB_AUTO_PASS = '';
   let sb = null, sbUser = null, _syncBusy = false, _syncPushTimer = null, _syncNeedsChoice = false, _syncLastMsg = '', _syncLastErr = false;
   const mkKey = b => b || '_none', fromMk = k => k === '_none' ? '' : k;
 
@@ -3082,6 +3085,10 @@ self.onmessage = function(e){
     const dot = document.getElementById('syncDot'); if (dot) dot.className = !sbUser ? '' : (isErr ? 'err' : (kind || 'ok'));
     const el = document.getElementById('syncStatus'); if (el){ el.textContent = _syncLastMsg; el.className = 'sy-stat' + (isErr ? ' err' : ''); }
     const btn = document.getElementById('syncBtn'); if (btn) btn.title = 'Sinkronisasi cloud' + (msg ? ' — ' + msg : '');
+    let tt = document.getElementById('syncToast');
+    if (!tt){ tt = document.createElement('div'); tt.id = 'syncToast'; tt.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9998;background:#1e4f7a;color:#fff;font-size:12.5px;padding:7px 14px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.25);display:none;pointer-events:none;max-width:90vw'; document.body.appendChild(tt); }
+    const ov = document.getElementById('syncOverlay'), panelOpen = ov && ov.classList.contains('show');
+    if (kind === 'busy' && sbUser && !panelOpen){ tt.textContent = '☁️ ' + msg; tt.style.display = 'block'; } else tt.style.display = 'none';
   }
   function renderSyncPanel(){
     document.getElementById('syncLogin').style.display = sbUser ? 'none' : 'block';
@@ -3101,8 +3108,8 @@ self.onmessage = function(e){
     if (error) { setSyncUi('Gagal masuk: ' + error.message, true); return; }
     document.getElementById('syPass').value = '';
     const { data } = await sb.auth.getSession(); sbUser = data.session ? data.session.user : null;
-    renderSyncPanel(); await syncNow({ force:true });
-    if (!_syncNeedsChoice && !_syncLastErr) closeSyncPanel();
+    renderSyncPanel(); closeSyncPanel(); await syncNow({ force:true });
+    if (_syncNeedsChoice || _syncLastErr) openSyncPanel();
   }
   async function syncLogout(){ try { await sb.auth.signOut(); } catch(e){} sbUser = null; _syncNeedsChoice = false; setSyncUi('', false); renderSyncPanel(); }
 
@@ -3260,6 +3267,9 @@ self.onmessage = function(e){
     document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
     window.addEventListener('online', () => syncNow());
     setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_POLL_MS);
+    if (!sbUser && SB_AUTO_EMAIL && SB_AUTO_PASS){
+      try { const r = await sb.auth.signInWithPassword({ email: SB_AUTO_EMAIL, password: SB_AUTO_PASS }); if (!r.error && r.data && r.data.session) sbUser = r.data.session.user; } catch(e){ console.warn('auto login', e); }
+    }
     if (sbUser) await syncNow(); else {
       setSyncUi('Belum masuk. Klik ☁️ untuk login.', false);
       // perangkat baru (belum ada data lokal) & belum login: langsung tampilkan form login
