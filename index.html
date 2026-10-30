@@ -1754,7 +1754,7 @@ self.onmessage = function(e){
     const txt = v => String(v == null ? '' : v).trim(), low = v => txt(v).toLowerCase();
     const numv = v => (typeof v === 'number' && isFinite(v)) ? v : null;
     const lastNum = r => { for (let i = r.length - 1; i >= 0; i--){ const n = numv(r[i]); if (n != null) return n; } return null; };
-    const after = (r, i) => { for (let k = i + 1; k < r.length; k++){ if (txt(r[k]) !== '') return r[k]; } return ''; };
+    const after = (r, i) => { for (let k = i + 1; k < r.length; k++){ const t = txt(r[k]); if (t !== '' && t !== ':') return r[k]; } return ''; };
     let no = '', tgl = null, cust = '', hdr = -1, jumlah = null, totalCell = null, disc = 0;
     a.forEach((r, ri) => { (r || []).forEach((c, ci) => {
       const l = low(c);
